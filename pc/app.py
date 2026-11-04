@@ -20,8 +20,30 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from lumbra import convert, fuentes
 from lumbra.tv import TV
 
+def _modo_selector():
+    """Con --selector, el programa solo abre el diálogo y deja lo elegido en un archivo."""
+    import tkinter
+    from tkinter import filedialog
+    funcion, opciones, salida = sys.argv[2:5]
+    raiz = tkinter.Tk()
+    raiz.withdraw()
+    raiz.attributes("-topmost", True)
+    elegido = getattr(filedialog, funcion)(**json.loads(opciones))
+    with open(salida, "w", encoding="utf-8") as f:
+        f.write("\n".join(elegido) if isinstance(elegido, (tuple, list)) else (elegido or ""))
+    sys.exit(0)
+
+
+if len(sys.argv) == 5 and sys.argv[1] == "--selector":
+    _modo_selector()
+
+# empaquetado como .exe: la página va dentro del programa y los datos, en la carpeta del usuario
+EMPAQUETADO = getattr(sys, "frozen", False)
 BASE = os.path.dirname(os.path.abspath(__file__))
-DATOS = os.environ.get("LUMBRA_DATOS") or os.path.join(BASE, "datos")
+RECURSOS = sys._MEIPASS if EMPAQUETADO else BASE
+DATOS = os.environ.get("LUMBRA_DATOS") or (
+    os.path.join(os.environ.get("LOCALAPPDATA") or os.path.expanduser("~"), "Lumbra") if EMPAQUETADO
+    else os.path.join(BASE, "datos"))
 CACHE = os.path.join(DATOS, "cache")
 ESTADO_PATH = os.path.join(DATOS, "estado.json")
 CONFIG_PATH = os.path.join(DATOS, "config.json")
@@ -175,7 +197,8 @@ def asegurar_tv():
 def apk_incluido():
     """El APK que venga junto al programa (descargado o recién compilado)."""
     raiz = os.path.dirname(BASE)
-    for patron in (os.path.join(raiz, "lumbra*.apk"), os.path.join(BASE, "lumbra*.apk"),
+    for patron in (os.path.join(os.path.dirname(sys.executable), "lumbra*.apk") if EMPAQUETADO else os.path.join(raiz, "lumbra*.apk"),
+                   os.path.join(BASE, "lumbra*.apk"),
                    os.path.join(raiz, "tv", "build", "app", "outputs", "flutter-apk", "app-release.apk")):
         hallados = sorted(glob.glob(patron), key=os.path.getmtime, reverse=True)
         if hallados:
@@ -273,23 +296,26 @@ def tv_conectada():
 
 
 def elegir_carpeta():
-    return _selector("print(d.askdirectory(title='Carpeta con videos o fotos'))")
+    return _selector("askdirectory", title="Carpeta con videos o fotos")
 
 
 def elegir_fotos():
-    tipos = "[('Fotos','*.jpg *.jpeg *.png *.webp *.bmp')]"
-    return (_selector(f"print(chr(10).join(d.askopenfilenames(title='Fotos para el salvapantallas',filetypes={tipos})))") or "").splitlines()
+    return (_selector("askopenfilenames", title="Fotos para el salvapantallas",
+                      filetypes=[("Fotos", "*.jpg *.jpeg *.png *.webp *.bmp")]) or "").splitlines()
 
 
-def _selector(orden):
+def _selector(funcion, **opciones):
     """Abre el selector de archivos del sistema, en otro proceso para no trabar el servidor."""
-    codigo = f"import tkinter as t, tkinter.filedialog as d;r=t.Tk();r.withdraw();r.attributes('-topmost',True);{orden}"
+    salida = os.path.join(DATOS, "selector.txt")
+    if os.path.exists(salida):
+        os.remove(salida)
+    orden = [sys.executable] + ([] if EMPAQUETADO else [os.path.abspath(__file__)])
     try:
-        r = subprocess.run([sys.executable, "-c", codigo], capture_output=True, text=True, timeout=600,
-                           encoding="utf-8", errors="replace")
+        subprocess.run(orden + ["--selector", funcion, json.dumps(opciones), salida], timeout=600)
+        with open(salida, encoding="utf-8") as f:
+            return f.read().strip() or None
     except (OSError, subprocess.TimeoutExpired):
         return None
-    return r.stdout.strip() or None
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -320,7 +346,7 @@ class Handler(BaseHTTPRequestHandler):
     def do_GET(self):
         partes = self.path.split("?")[0].strip("/").split("/")
         if partes == [""]:
-            self._archivo(os.path.join(BASE, "web", "index.html"), "text/html; charset=utf-8")
+            self._archivo(os.path.join(RECURSOS, "web", "index.html"), "text/html; charset=utf-8")
         elif partes == ["api", "items"]:
             lista = []
             ocultos = ESTADO.setdefault("ocultos", [])
@@ -397,6 +423,9 @@ class Handler(BaseHTTPRequestHandler):
             ESTADO["automatico"] = bool(datos.get("activo"))
             guardar_estado()
             self._json({"ok": True})
+        elif partes == ["api", "salir"]:
+            self._json({"ok": True})
+            threading.Timer(.3, os._exit, [0]).start()
         elif partes == ["api", "salva", "subir"]:
             rutas = [r for r in (datos.get("rutas") or elegir_fotos()) if os.path.isfile(r)]
             if rutas:
@@ -452,7 +481,7 @@ def main():
         return
     threading.Thread(target=trabajador, daemon=True).start()
     threading.Thread(target=vigilante, daemon=True).start()
-    print(f"Lumbra listo en {url}  (cierra esta ventana para detenerlo)")
+    print(f"Lumbra listo en {url}  (cierra esta ventana o pulsa Salir en la página para detenerlo)")
     if os.environ.get("LUMBRA_NO_BROWSER") != "1":
         webbrowser.open(url)
     servidor.serve_forever()

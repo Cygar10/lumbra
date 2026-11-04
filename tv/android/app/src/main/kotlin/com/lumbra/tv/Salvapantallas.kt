@@ -221,8 +221,8 @@ class VistaSalvapantallas(context: Context) : FrameLayout(context), SurfaceHolde
     }
 
     private companion object {
-        // el salvapantallas anterior hacía 1 % por segundo; se pidió un 20 % más lento
-        const val ZOOM_NORMAL = .008f
+        // 0.25 % por segundo: con 15 s por foto no llega al 5 %, y la foto se sigue viendo entera
+        const val ZOOM_NORMAL = .0025f
         const val FUNDIDO_MS = 2000L
     }
 }

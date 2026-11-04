@@ -26,9 +26,9 @@ Necesitas una TV con Android TV o Google TV y activar en ella las **Opciones de 
 
 ### Opción A: con el programa de PC (lo más fácil)
 
-1. Instala [Python 3.10 o superior](https://www.python.org/downloads/), [FFmpeg](https://ffmpeg.org/download.html) y [ADB](https://developer.android.com/tools/releases/platform-tools).
-2. Descarga este proyecto y el APK de la sección **Releases**, y deja el APK en la carpeta principal del proyecto.
-3. Abre el programa: en Windows, doble clic en `pc/iniciar.bat`; en Linux o macOS, `python3 pc/app.py`.
+1. Instala [FFmpeg](https://ffmpeg.org/download.html) y [ADB](https://developer.android.com/tools/releases/platform-tools).
+2. Descarga de la sección **Releases** `Lumbra.exe` y `lumbra.apk`, y déjalos en la misma carpeta.
+3. Abre `Lumbra.exe` con doble clic. Se abre en tu navegador; para cerrarlo, pulsa **Salir**. En Linux o macOS instala [Python 3.10 o superior](https://www.python.org/downloads/) y ejecuta `python3 pc/app.py`.
 4. **Solo la primera vez:** pulsa **Emparejar** y escribe la IP, el puerto y el código que muestra la TV en «Emparejar dispositivo con código».
 5. Escribe la IP y el puerto de la pantalla principal de Depuración inalámbrica y pulsa **Conectar**.
 6. Pulsa **Instalar en la TV**. También deja a Lumbra como pantalla de inicio y le da sus permisos.
@@ -76,6 +76,12 @@ cd tv
 
 ```bash
 flutter build apk --release --target-platform android-arm,android-arm64
+```
+
+Para crear `Lumbra.exe` desde `pc/`:
+
+```bash
+pyinstaller --onefile --noconsole --name Lumbra --add-data "web;web" app.py
 ```
 
 Para medir el rendimiento en la TV: `flutter build apk --release --dart-define=MEDIR=true` escribe en el registro cuánto tarda cada cuadro.

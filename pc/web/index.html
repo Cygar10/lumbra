@@ -75,6 +75,7 @@
   <button id="btnPuerto" title="Deja la TV en el puerto 5555 hasta que se reinicie">Fijar puerto</button>
   <button id="btnInstalar" title="Instala Lumbra en la TV y le da sus permisos">Instalar en la TV</button>
   <button id="btnCerrar">Cerrar vista previa</button>
+  <button id="btnSalir" title="Cierra el programa de PC. La TV sigue funcionando igual">Salir</button>
   <label class="switch" title="Volumen del fondo en la TV">Volumen
     <input type="range" id="vol" min="0" max="100" step="5" style="width:110px;padding:0" aria-label="Volumen del fondo">
     <span id="volTxt" style="min-width:36px">0 %</span></label>
@@ -169,6 +170,10 @@ Se borra su versión convertida y puedes recuperarlo con «Restaurar todos».`))
 });
 $("btnRestaurar").onclick = () => post("/api/restaurar").then(cargarGaleria);
 $("btnCerrar").onclick = () => post("/api/cerrar");
+$("btnSalir").onclick = async () => {
+  await post("/api/salir");
+  document.body.innerHTML = '<p style="padding:40px;font-size:18px">Lumbra se cerró. Ya puedes cerrar esta pestaña.</p>';
+};
 $("btnInstalar").onclick = () => { toast("Preparando Lumbra en la TV…"); post("/api/instalar"); };
 $("btnEmparejar").onclick = async () => {
   const direccion = prompt("Primera vez: en la TV abre Depuración inalámbrica → «Emparejar dispositivo con código».\n\nEscribe la IP:puerto que aparece en ESA ventana:");

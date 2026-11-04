@@ -8,6 +8,7 @@ __pycache__/
 
 # los APK se publican como «Release», no en el código
 *.apk
+*.exe
 
 # Flutter y Android
 tv/build/

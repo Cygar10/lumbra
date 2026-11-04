@@ -190,7 +190,7 @@ class _PanelAjustesState extends State<PanelAjustes> {
           if (_salva['activeInSystem'] == true)
             const Opcion('Cuándo se activa', ayuda: 'Se cambia en los ajustes de la TV')
           else
-            _numero('Activar sin usar la TV tras', 'salva_minutos', const [5, 10, 15, 20, 30, 45, 60], (v) => '$v min'),
+            _numero('Activar sin usar la TV tras', 'salva_minutos', const [5, 10, 15, 20, 25, 30, 45, 60], (v) => '$v min'),
           Opcion('Probar ahora', accion: Nativo.probarSalva),
         ],
         Opcion('Ajustes de salvapantallas de la TV',
