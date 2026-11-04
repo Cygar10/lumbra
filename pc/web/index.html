@@ -1,0 +1,267 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Lumbra</title>
+<style>
+  :root { --bg:#0d0708; --card:#1a1012; --line:#33201f; --txt:#f1e6e4; --sub:#a8918e; --acc:#c3141c; --ok:#3fae6a; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--txt); font:15px/1.5 system-ui,"Segoe UI",sans-serif; }
+  header { position:sticky; top:0; z-index:2; background:var(--bg); border-bottom:1px solid var(--line);
+           padding:14px 24px; display:flex; flex-wrap:wrap; gap:16px; align-items:center; }
+  h1 { font-size:20px; margin:0 auto 0 0; letter-spacing:.04em; color:var(--acc); }
+  .chip { font-size:13px; color:var(--sub); display:flex; align-items:center; gap:8px; }
+  .dot { width:8px; height:8px; border-radius:50%; background:var(--sub); }
+  button { background:transparent; color:var(--txt); border:1px solid var(--line); border-radius:8px;
+           padding:7px 12px; font:inherit; font-size:13px; cursor:pointer; }
+  button:hover { border-color:var(--acc); }
+  button.primario { background:var(--acc); border-color:var(--acc); }
+  select { background:var(--card); color:var(--txt); border:1px solid var(--line); border-radius:8px; padding:6px 10px; font:inherit; font-size:13px; }
+  #fuentes { display:flex; flex-wrap:wrap; gap:12px; align-items:center; padding:12px 24px; font-size:14px; }
+  #faltan { flex-basis:100%; margin:0; color:#ffb4a9; font-size:13px; }
+  #listaCarpetas { display:contents; }
+  .carpeta { display:inline-flex; align-items:center; gap:6px; background:var(--card); border:1px solid var(--line); border-radius:8px; padding:4px 6px 4px 10px; font-size:13px; max-width:340px; }
+  .carpeta span { overflow:hidden; white-space:nowrap; text-overflow:ellipsis; direction:rtl; }
+  .carpeta button { padding:0 6px; border:0; line-height:20px; }
+  input { background:var(--card); color:var(--txt); border:1px solid var(--line); border-radius:8px; padding:6px 10px; width:170px; }
+  #actividad { padding:10px 24px; font-size:14px; color:var(--sub); min-height:40px; }
+  #actividad.error { color:#ff8a80; }
+  .barra { height:3px; background:var(--line); margin-top:6px; max-width:420px; }
+  .barra i { display:block; height:100%; background:var(--acc); width:0; transition:width .4s; }
+  main { display:grid; grid-template-columns:repeat(auto-fill,minmax(260px,1fr)); gap:16px; padding:8px 24px 40px; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:12px; overflow:hidden; display:flex; flex-direction:column; }
+  .card.actual { border-color:var(--acc); }
+  .thumb { aspect-ratio:16/9; background:#000 center/cover no-repeat; position:relative; }
+  .tag { position:absolute; top:8px; left:8px; font-size:12px; padding:2px 8px; border-radius:6px; background:rgba(0,0,0,.7); }
+  .tag.fondo { background:var(--acc); }
+  .info { padding:10px 12px; display:flex; flex-direction:column; gap:10px; flex:1; }
+  .titulo { font-size:14px; overflow:hidden; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; }
+  .meta { font-size:12px; color:var(--sub); }
+  .acciones { display:flex; gap:8px; margin-top:auto; }
+  .acciones button { flex:1; }
+  .switch { display:flex; align-items:center; gap:8px; font-size:13px; cursor:pointer; }
+  #toast { position:fixed; right:20px; bottom:20px; z-index:5; max-width:min(420px,calc(100vw - 40px));
+           background:#24161a; border:1px solid var(--line); border-left:4px solid var(--acc); border-radius:10px;
+           padding:12px 16px; display:flex; gap:12px; align-items:center; font-size:14px;
+           box-shadow:0 8px 24px rgba(0,0,0,.5); transition:opacity .3s, transform .3s; }
+  #toast.oculto { opacity:0; transform:translateY(12px); pointer-events:none; }
+  #toast.ok { border-left-color:var(--ok); }
+  #toast.mal { border-left-color:#ff5a4f; }
+  .spin { width:16px; height:16px; flex:none; border:2px solid var(--line); border-top-color:var(--acc);
+          border-radius:50%; animation:g 0.8s linear infinite; }
+  #toast.ok .spin, #toast.mal .spin { display:none; }
+  @keyframes g { to { transform:rotate(360deg); } }
+  .barra-herr { display:flex; flex-wrap:wrap; gap:12px; align-items:center; padding:4px 24px 8px; }
+  #buscar { width:min(360px,100%); padding:8px 12px; }
+  #cuenta { font-size:13px; color:var(--sub); }
+  #btnRestaurar { margin-left:auto; }
+  .borrar { position:absolute; top:6px; right:6px; width:30px; height:30px; padding:0; border-radius:8px;
+            background:rgba(0,0,0,.65); border-color:transparent; font-size:15px; line-height:1; opacity:0; transition:opacity .2s; }
+  .card:hover .borrar, .borrar:focus-visible { opacity:1; }
+  .borrar:hover { background:#7a0c10; border-color:var(--acc); }
+  @media (hover:none) { .borrar { opacity:1; } }
+  @media (max-width:600px) { .barra-herr { padding-left:16px; padding-right:16px; } }
+  @media (max-width:600px) { header, #actividad, main, #fuentes { padding-left:16px; padding-right:16px; } }
+</style>
+</head>
+<body>
+<header>
+  <h1>LUMBRA</h1>
+  <span class="chip"><span class="dot" id="tvDot"></span><span id="tvTxt">TV</span></span>
+  <input id="dir" placeholder="IP:puerto de la TV" aria-label="Dirección de la TV">
+  <button id="btnConectar">Conectar</button>
+  <button id="btnEmparejar" title="Solo la primera vez: la TV muestra un código de 6 dígitos">Emparejar</button>
+  <button id="btnPuerto" title="Deja la TV en el puerto 5555 hasta que se reinicie">Fijar puerto</button>
+  <button id="btnInstalar" title="Instala Lumbra en la TV y le da sus permisos">Instalar en la TV</button>
+  <button id="btnCerrar">Cerrar vista previa</button>
+  <label class="switch" title="Volumen del fondo en la TV">Volumen
+    <input type="range" id="vol" min="0" max="100" step="5" style="width:110px;padding:0" aria-label="Volumen del fondo">
+    <span id="volTxt" style="min-width:36px">0 %</span></label>
+  <label class="switch"><input type="checkbox" id="auto" style="width:auto"> Automático</label>
+</header>
+<div id="actividad"><span id="msg">Cargando…</span><div class="barra" id="barra" hidden><i id="barraIn"></i></div></div>
+<section id="fuentes">
+  <strong>Tus fondos</strong>
+  <span id="listaCarpetas"></span>
+  <button id="btnCarpeta">Añadir carpeta</button>
+  <button id="btnFotos" title="Elige una o varias fotos: llegan a la TV en HD (1080p)">Subir fotos al salvapantallas</button>
+  <label class="switch" id="etqWE"><input type="checkbox" id="usarWE" style="width:auto"> Incluir Wallpaper Engine</label>
+  <label class="switch">Calidad
+    <select id="resolucion"><option value="auto">Automática</option><option value="1280x720">720p (más fluido)</option><option value="1920x1080">1080p</option></select>
+  </label>
+  <p id="faltan" hidden></p>
+</section>
+<div class="barra-herr">
+  <input id="buscar" type="search" placeholder="Buscar…" aria-label="Buscar fondo">
+  <span id="cuenta"></span>
+  <button id="btnRestaurar" hidden title="Vuelve a mostrar lo que quitaste de la galería">Restaurar todos</button>
+</div>
+<main id="galeria"></main>
+<div id="toast" class="oculto" role="status" aria-live="polite"><span class="spin"></span><span id="toastTxt"></span></div>
+
+<script>
+const $ = id => document.getElementById(id);
+const post = (url, body) => fetch(url, {method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify(body||{})}).then(r => r.json());
+
+async function cargarGaleria() {
+  const items = await fetch("/api/items").then(r => r.json());
+  $("galeria").innerHTML = items.map(i => `
+    <div class="card ${i.actual ? "actual" : ""}" data-id="${i.id}" data-origen="${i.origen}">
+      <div class="thumb" style="${i.preview ? `background-image:url(/preview/${i.id})` : ""}">
+        ${i.actual ? '<span class="tag fondo">Fondo actual</span>' : i.cache ? '<span class="tag">Listo para TV</span>' : `<span class="tag">${i.tipo === "imagen" ? "Imagen" : "Video"}</span>`}
+        <button class="borrar" data-a="eliminar" data-id="${i.id}" title="Quitar de la galería" aria-label="Quitar de la galería">🗑</button>
+      </div>
+      <div class="info">
+        <div class="titulo"></div>
+        <div class="meta">${i.mb} MB${i.cache ? " · convertido" : ""}</div>
+        <div class="acciones">
+          ${i.tipo === "imagen" ? `<button data-a="salva" data-id="${i.id}">Al salvapantallas</button>` : `<button data-a="ver" data-id="${i.id}">Ver en TV</button>`}
+          <button class="primario" data-a="fondo" data-id="${i.id}">Poner de fondo</button>
+        </div>
+      </div>
+    </div>`).join("") || '<p style="color:var(--sub)">Todavía no hay fondos. Añade arriba una carpeta con videos o fotos.</p>';
+  document.querySelectorAll(".titulo").forEach((el, n) => el.textContent = items[n].titulo);
+  titulos = Object.fromEntries(items.map(i => [i.id, i.titulo]));
+  filtrar();
+}
+
+let titulos = {};
+const normal = t => t.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
+function filtrar() {
+  const q = normal($("buscar").value.trim());
+  let visibles = 0;
+  document.querySelectorAll(".card").forEach(c => {
+    const ok = !q || normal(titulos[c.dataset.id] || "").includes(q);
+    c.hidden = !ok;
+    if (ok) visibles++;
+  });
+  const total = Object.keys(titulos).length;
+  $("cuenta").textContent = q ? `${visibles} de ${total}` : `${total} fondos`;
+}
+$("buscar").oninput = filtrar;
+
+let toastTimer, ultimoN = -1;
+function toast(texto, tipo) {
+  clearTimeout(toastTimer);
+  $("toastTxt").textContent = texto;
+  $("toast").className = tipo || "";
+  if (tipo) toastTimer = setTimeout(() => $("toast").classList.add("oculto"), 6000);
+}
+
+$("galeria").addEventListener("click", e => {
+  const b = e.target.closest("button[data-a]");
+  if (!b) return;
+  if (b.dataset.a === "eliminar") {
+    const t = titulos[b.dataset.id] || "este fondo";
+    const esWE = b.closest(".card").dataset.origen === "wallpaper_engine";
+    if (!confirm(`¿Quitar «${t}» de la galería?
+
+Se borra su versión convertida y puedes recuperarlo con «Restaurar todos».`)) return;
+    const borrarPc = esWE && confirm(`¿Borrar también sus archivos de la PC?
+
+Úsalo si ya te desuscribiste en Steam y sigue apareciendo. Si sigues suscrito, Steam lo volverá a descargar.`);
+    post(`/api/eliminar/${b.dataset.id}`, {borrar_pc: borrarPc}).then(cargarGaleria);
+    return;
+  }
+  toast(b.dataset.a === "fondo" ? "Preparando el fondo…" : "Preparando el archivo para la TV…");
+  post(`/api/${b.dataset.a}/${b.dataset.id}`);
+});
+$("btnRestaurar").onclick = () => post("/api/restaurar").then(cargarGaleria);
+$("btnCerrar").onclick = () => post("/api/cerrar");
+$("btnInstalar").onclick = () => { toast("Preparando Lumbra en la TV…"); post("/api/instalar"); };
+$("btnEmparejar").onclick = async () => {
+  const direccion = prompt("Primera vez: en la TV abre Depuración inalámbrica → «Emparejar dispositivo con código».\n\nEscribe la IP:puerto que aparece en ESA ventana:");
+  if (!direccion) return;
+  const codigo = prompt("Ahora el código de 6 dígitos:");
+  if (!codigo) return;
+  const r = await post("/api/emparejar", {direccion, codigo});
+  $("msg").textContent = r.ok ? "Emparejada. Ahora escribe arriba la IP:puerto de la pantalla principal de Depuración inalámbrica y pulsa Conectar." : "No se pudo emparejar. Revisa el código y el puerto.";
+};
+async function cargarFuentes() {
+  const f = await fetch("/api/fuentes").then(r => r.json());
+  $("listaCarpetas").innerHTML = "";
+  for (const c of f.carpetas) {
+    const el = document.createElement("span");
+    el.className = "carpeta";
+    const nombre = document.createElement("span");
+    nombre.textContent = c;
+    const quitar = document.createElement("button");
+    quitar.textContent = "✕";
+    quitar.title = "Quitar esta carpeta (no borra nada)";
+    quitar.onclick = () => post("/api/carpeta/quitar", {ruta: c}).then(() => { cargarFuentes(); cargarGaleria(); });
+    el.append(nombre, quitar);
+    $("listaCarpetas").append(el);
+  }
+  $("etqWE").hidden = !f.wallpaper_engine_dir;
+  $("usarWE").checked = f.usar_wallpaper_engine;
+  $("resolucion").value = f.resolucion;
+}
+$("btnCarpeta").onclick = async () => {
+  await post("/api/carpeta/agregar");
+  cargarFuentes();
+  cargarGaleria();
+};
+$("btnFotos").onclick = async () => {
+  const r = await post("/api/salva/subir");
+  if (r.ok) toast(`Subiendo ${r.fotos} fotos en HD…`);
+};
+$("usarWE").onchange = e => post("/api/opciones", {usar_wallpaper_engine: e.target.checked}).then(cargarGaleria);
+$("resolucion").onchange = e => post("/api/opciones", {resolucion: e.target.value});
+let volTocado = false;
+$("vol").oninput = e => { volTocado = true; $("volTxt").textContent = e.target.value + " %"; };
+$("vol").onchange = e => {
+  toast(`Ajustando el volumen del fondo a ${e.target.value} %…`);
+  post("/api/volumen", {valor: +e.target.value}).then(() => volTocado = false);
+};
+$("auto").onchange = e => post("/api/automatico", {activo: e.target.checked});
+$("btnConectar").onclick = async () => {
+  $("msg").textContent = "Conectando…";
+  const r = await post("/api/conectar", {direccion: $("dir").value.trim()});
+  $("msg").textContent = r.ok ? `Conectado a ${r.tv}` : "No se pudo conectar. Revisa el puerto en la TV.";
+};
+$("btnPuerto").onclick = async () => {
+  $("msg").textContent = "Fijando puerto 5555…";
+  const r = await post("/api/fijar-puerto");
+  $("msg").textContent = r.ok ? `Listo, la TV queda en ${r.tv} hasta que se reinicie` : "No se pudo fijar el puerto";
+};
+
+let ultimo = "", dirCargado = false;
+async function estado() {
+  try {
+    const s = await fetch("/api/estado").then(r => r.json());
+    $("auto").checked = s.automatico;
+    const faltan = [!s.adb && "ADB (platform-tools)", !s.ffmpeg && "FFmpeg"].filter(Boolean);
+    $("faltan").hidden = !faltan.length;
+    $("faltan").textContent = faltan.length ? `Falta instalar en esta PC: ${faltan.join(" y ")}. Sin esto no se pueden preparar ni enviar fondos.` : "";
+    $("btnInstalar").title = s.apk ? "Instala Lumbra en la TV y le da sus permisos" : "No hay APK junto al programa: solo da los permisos a un Lumbra ya instalado";
+    $("btnRestaurar").hidden = !s.ocultos;
+    $("btnRestaurar").textContent = `Restaurar todos (${s.ocultos})`;
+    if (!volTocado && !s.ocupado) { $("vol").value = s.volumen; $("volTxt").textContent = s.volumen + " %"; }
+    $("tvTxt").textContent = s.tv ? `TV ${s.tv}` : "TV sin conectar";
+    $("tvDot").style.background = s.tv ? "var(--ok)" : "var(--sub)";
+    if (!dirCargado && s.tv) { $("dir").value = s.tv; dirCargado = true; }
+    const msg = s.error ? `${s.mensaje}: ${s.error}` : s.mensaje + (s.pendientes ? ` (${s.pendientes} en cola)` : "");
+    $("msg").textContent = msg;
+    $("actividad").className = s.error ? "error" : "";
+    $("barra").hidden = s.progreso == null || s.progreso >= 100;
+    $("barraIn").style.width = (s.progreso || 0) + "%";
+    if (s.n !== ultimoN) {
+      if (ultimoN !== -1) {
+        const p = s.progreso != null && s.progreso < 100 ? ` ${s.progreso}%` : "";
+        toast(msg + p, s.error ? "mal" : s.ocupado ? "" : "ok");
+      }
+      ultimoN = s.n;
+    } else if (s.ocupado && s.progreso != null) {
+      $("toastTxt").textContent = `${s.mensaje} ${s.progreso}%`;
+    }
+    if (msg !== ultimo) { ultimo = msg; cargarGaleria(); }
+  } catch { $("msg").textContent = "El programa no está corriendo"; }
+}
+cargarFuentes();
+cargarGaleria();
+estado();
+setInterval(estado, 1500);
+</script>
+</body>
+</html>

@@ -1,0 +1,24 @@
+# archivos personales y de terceros que nunca se publican
+_personal/
+
+# datos locales del programa de PC: tu configuración, tu TV y tus videos convertidos
+pc/datos/
+__pycache__/
+*.pyc
+
+# los APK se publican como «Release», no en el código
+*.apk
+
+# Flutter y Android
+tv/build/
+tv/.dart_tool/
+tv/.idea/
+tv/*.iml
+tv/android/*.iml
+tv/.flutter-plugins-dependencies
+tv/android/.gradle/
+tv/android/.kotlin/
+tv/android/local.properties
+tv/android/key.properties
+*.jks
+*.keystore
