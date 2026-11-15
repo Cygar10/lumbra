@@ -26,17 +26,24 @@ class MediaListener : NotificationListenerService() {
 }
 
 /** Sigue lo que suena en la TV (Spotify, YouTube Music…) y avisa con título, artista y portada. */
-class MediaWatcher(private val context: Context, private val alCambiar: (Map<String, Any?>?) -> Unit) {
+class MediaWatcher(
+    private val context: Context,
+    private val alSonar: (Boolean) -> Unit,
+    private val alCambiar: (Map<String, Any?>?) -> Unit,
+) {
     private val manager = context.getSystemService(Context.MEDIA_SESSION_SERVICE) as MediaSessionManager
     private val componente = ComponentName(context, MediaListener::class.java)
     private val handler = Handler(Looper.getMainLooper())
     private var controladores = listOf<MediaController>()
     private var ultimo: Map<String, Any?>? = null
     private var ultimaPortada: Pair<String, ByteArray?>? = null
+    private var ocultando = false
 
     private val callback = object : MediaController.Callback() {
         override fun onPlaybackStateChanged(state: PlaybackState?) = publicar()
         override fun onMetadataChanged(metadata: MediaMetadata?) = publicar()
+        // pasa de sonar aquí a sonar en el teléfono (o al revés) sin cambiar de canción
+        override fun onAudioInfoChanged(info: MediaController.PlaybackInfo) = publicar()
         override fun onSessionDestroyed() = actualizarSesiones(null)
     }
 
@@ -62,6 +69,7 @@ class MediaWatcher(private val context: Context, private val alCambiar: (Map<Str
 
     fun detener() {
         handler.removeCallbacks(ocultar)
+        ocultando = false
         try {
             manager.removeOnActiveSessionsChangedListener(sesiones)
         } catch (_: Exception) {
@@ -82,11 +90,20 @@ class MediaWatcher(private val context: Context, private val alCambiar: (Map<Str
     }
 
     private val ocultar = Runnable {
+        ocultando = false
         ultimo = null
         alCambiar(null)
     }
 
+    /**
+     * Spotify Connect, Cast y similares: la app de la TV muestra y controla la canción, pero el
+     * sonido sale por otro aparato (teléfono, PC, otra TV). Android lo marca como volumen remoto.
+     */
+    private fun enOtroDispositivo(c: MediaController) =
+        c.playbackInfo?.playbackType == MediaController.PlaybackInfo.PLAYBACK_TYPE_REMOTE
+
     private fun publicar() {
+        alSonar(hayMusica())
         // al cambiar de canción Spotify pasa por BUFFERING / SKIPPING_TO_NEXT: también cuenta
         val activo = controladores.firstOrNull { it.playbackState?.state == PlaybackState.STATE_PLAYING }
             ?: controladores.firstOrNull { it.playbackState?.state in ENTRE_CANCIONES && it.metadata != null }
@@ -106,15 +123,21 @@ class MediaWatcher(private val context: Context, private val alCambiar: (Map<Str
                 "title" to titulo,
                 "artist" to artista,
                 "playing" to (c.playbackState?.state == PlaybackState.STATE_PLAYING),
+                "remote" to enOtroDispositivo(c),
                 "art" to portada(c.packageName + titulo, m),
             )
         }
         if (datos == null) {
             // no se quita la tarjeta enseguida: entre canciones la sesión queda vacía un instante
-            if (ultimo != null && !handler.hasCallbacks(ocultar)) handler.postDelayed(ocultar, 2000)
+            // (hasCallbacks no existe antes de Android 10)
+            if (ultimo != null && !ocultando) {
+                ocultando = true
+                handler.postDelayed(ocultar, 2000)
+            }
             return
         }
         handler.removeCallbacks(ocultar)
+        ocultando = false
         if (datos != ultimo) {
             ultimo = datos
             alCambiar(datos)
@@ -134,8 +157,10 @@ class MediaWatcher(private val context: Context, private val alCambiar: (Map<Str
         return bytes
     }
 
-    /** true si alguna otra app está reproduciendo audio ahora mismo. */
-    fun hayMusica() = controladores.any { it.playbackState?.state == PlaybackState.STATE_PLAYING }
+    /** true si alguna otra app está sonando ahora mismo por los altavoces de esta TV. */
+    fun hayMusica() = controladores.any {
+        it.playbackState?.state == PlaybackState.STATE_PLAYING && !enOtroDispositivo(it)
+    }
 
     fun control(paquete: String, accion: String) {
         val c = controladores.firstOrNull { it.packageName == paquete } ?: return

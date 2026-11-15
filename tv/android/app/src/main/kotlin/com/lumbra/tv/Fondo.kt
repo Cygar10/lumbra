@@ -189,6 +189,10 @@ object Imagenes {
         val w = (ancho / escala).toInt().coerceIn(1, original.width)
         val h = (alto / escala).toInt().coerceIn(1, original.height)
         val recorte = Bitmap.createBitmap(original, (original.width - w) / 2, (original.height - h) / 2, w, h)
-        return Bitmap.createScaledBitmap(recorte, ancho, alto, true)
+        val final = Bitmap.createScaledBitmap(recorte, ancho, alto, true)
+        // las copias intermedias pueden pesar decenas de MB: se sueltan ya, sin esperar al recolector
+        if (recorte !== final) recorte.recycle()
+        if (original !== final && original !== recorte) original.recycle()
+        return final
     }
 }

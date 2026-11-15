@@ -5,34 +5,50 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Lumbra</title>
 <style>
-  :root { --bg:#0d0708; --card:#1a1012; --line:#33201f; --txt:#f1e6e4; --sub:#a8918e; --acc:#c3141c; --ok:#3fae6a; }
+  :root { --bg:#0d0708; --card:#1a1012; --line:#33201f; --txt:#f1e6e4; --sub:#a8918e; --acc:#c3141c; --ok:#3fae6a;
+          --suave:cubic-bezier(.2,.7,.2,1); color-scheme:dark; }
   * { box-sizing:border-box; }
+  html { scrollbar-color:var(--line) var(--bg); }
   body { margin:0; background:var(--bg); color:var(--txt); font:15px/1.5 system-ui,"Segoe UI",sans-serif; }
-  header { position:sticky; top:0; z-index:2; background:var(--bg); border-bottom:1px solid var(--line);
-           padding:14px 24px; display:flex; flex-wrap:wrap; gap:16px; align-items:center; }
+  header { position:sticky; top:0; z-index:2; background:rgba(13,7,8,.92); backdrop-filter:blur(8px);
+           border-bottom:1px solid var(--line); padding:14px 24px; display:flex; flex-wrap:wrap; gap:12px 16px; align-items:center; }
   h1 { font-size:20px; margin:0 auto 0 0; letter-spacing:.04em; color:var(--acc); }
   .chip { font-size:13px; color:var(--sub); display:flex; align-items:center; gap:8px; }
-  .dot { width:8px; height:8px; border-radius:50%; background:var(--sub); }
+  .dot { width:8px; height:8px; border-radius:50%; background:var(--sub); transition:background .3s, box-shadow .3s; }
+  .dot.on { background:var(--ok); box-shadow:0 0 0 4px rgba(63,174,106,.18); }
   button { background:transparent; color:var(--txt); border:1px solid var(--line); border-radius:8px;
-           padding:7px 12px; font:inherit; font-size:13px; cursor:pointer; }
+           padding:7px 12px; font:inherit; font-size:13px; cursor:pointer;
+           transition:border-color .15s, background .15s, transform .1s; }
   button:hover { border-color:var(--acc); }
+  button:active { transform:scale(.97); }
+  button:focus-visible, input:focus-visible, select:focus-visible { outline:2px solid var(--acc); outline-offset:2px; }
   button.primario { background:var(--acc); border-color:var(--acc); }
+  button.primario:hover { background:#d91a23; }
   select { background:var(--card); color:var(--txt); border:1px solid var(--line); border-radius:8px; padding:6px 10px; font:inherit; font-size:13px; }
   #fuentes { display:flex; flex-wrap:wrap; gap:12px; align-items:center; padding:12px 24px; font-size:14px; }
-  #faltan { flex-basis:100%; margin:0; color:#ffb4a9; font-size:13px; }
+  #faltan { flex-basis:100%; margin:0; color:#ffb4a9; font-size:13px; display:flex; flex-wrap:wrap; gap:10px; align-items:center; }
+  #faltan[hidden] { display:none; }
   #listaCarpetas { display:contents; }
   .carpeta { display:inline-flex; align-items:center; gap:6px; background:var(--card); border:1px solid var(--line); border-radius:8px; padding:4px 6px 4px 10px; font-size:13px; max-width:340px; }
   .carpeta span { overflow:hidden; white-space:nowrap; text-overflow:ellipsis; direction:rtl; }
   .carpeta button { padding:0 6px; border:0; line-height:20px; }
-  input { background:var(--card); color:var(--txt); border:1px solid var(--line); border-radius:8px; padding:6px 10px; width:170px; }
+  input { background:var(--card); color:var(--txt); border:1px solid var(--line); border-radius:8px; padding:6px 10px; width:170px; font:inherit; font-size:13px; }
   #actividad { padding:10px 24px; font-size:14px; color:var(--sub); min-height:40px; }
   #actividad.error { color:#ff8a80; }
-  .barra { height:3px; background:var(--line); margin-top:6px; max-width:420px; }
+  .barra { height:3px; background:var(--line); margin-top:6px; max-width:420px; border-radius:2px; overflow:hidden; }
   .barra i { display:block; height:100%; background:var(--acc); width:0; transition:width .4s; }
   main { display:grid; grid-template-columns:repeat(auto-fill,minmax(260px,1fr)); gap:16px; padding:8px 24px 40px; }
-  .card { background:var(--card); border:1px solid var(--line); border-radius:12px; overflow:hidden; display:flex; flex-direction:column; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:12px; overflow:hidden; display:flex; flex-direction:column;
+          transition:transform .2s var(--suave), border-color .2s, box-shadow .2s; }
+  .card.nueva { animation:entra .35s var(--suave) both; animation-delay:calc(min(var(--n),12) * 25ms); }
+  .card:hover { transform:translateY(-3px); border-color:#553331; box-shadow:0 10px 24px rgba(0,0,0,.45); }
   .card.actual { border-color:var(--acc); }
-  .thumb { aspect-ratio:16/9; background:#000 center/cover no-repeat; position:relative; }
+  .card[hidden] { display:none; }
+  @keyframes entra { from { opacity:0; transform:translateY(10px); } }
+  .thumb { aspect-ratio:16/9; background:#000; position:relative; overflow:hidden; }
+  .thumb img { width:100%; height:100%; object-fit:cover; display:block; opacity:0; transition:opacity .3s, transform .5s var(--suave); }
+  .thumb img.lista { opacity:1; }
+  .card:hover .thumb img { transform:scale(1.04); }
   .tag { position:absolute; top:8px; left:8px; font-size:12px; padding:2px 8px; border-radius:6px; background:rgba(0,0,0,.7); }
   .tag.fondo { background:var(--acc); }
   .info { padding:10px 12px; display:flex; flex-direction:column; gap:10px; flex:1; }
@@ -41,10 +57,11 @@
   .acciones { display:flex; gap:8px; margin-top:auto; }
   .acciones button { flex:1; }
   .switch { display:flex; align-items:center; gap:8px; font-size:13px; cursor:pointer; }
+  .switch input[type=checkbox], .switch input[type=range] { width:auto; accent-color:var(--acc); }
   #toast { position:fixed; right:20px; bottom:20px; z-index:5; max-width:min(420px,calc(100vw - 40px));
            background:#24161a; border:1px solid var(--line); border-left:4px solid var(--acc); border-radius:10px;
            padding:12px 16px; display:flex; gap:12px; align-items:center; font-size:14px;
-           box-shadow:0 8px 24px rgba(0,0,0,.5); transition:opacity .3s, transform .3s; }
+           box-shadow:0 8px 24px rgba(0,0,0,.5); transition:opacity .3s, transform .3s var(--suave); }
   #toast.oculto { opacity:0; transform:translateY(12px); pointer-events:none; }
   #toast.ok { border-left-color:var(--ok); }
   #toast.mal { border-left-color:#ff5a4f; }
@@ -60,9 +77,20 @@
             background:rgba(0,0,0,.65); border-color:transparent; font-size:15px; line-height:1; opacity:0; transition:opacity .2s; }
   .card:hover .borrar, .borrar:focus-visible { opacity:1; }
   .borrar:hover { background:#7a0c10; border-color:var(--acc); }
+  dialog { background:var(--card); color:var(--txt); border:1px solid var(--line); border-radius:14px; padding:22px 24px;
+           width:min(440px,calc(100vw - 32px)); box-shadow:0 20px 60px rgba(0,0,0,.6); }
+  dialog[open] { animation:modal .22s var(--suave); }
+  dialog::backdrop { background:rgba(0,0,0,.6); backdrop-filter:blur(2px); }
+  @keyframes modal { from { opacity:0; transform:translateY(8px) scale(.98); } }
+  dialog h2 { margin:0 0 8px; font-size:17px; font-weight:600; }
+  dialog p { margin:0 0 14px; color:var(--sub); font-size:14px; }
+  dialog label { display:block; font-size:13px; color:var(--sub); margin-bottom:12px; }
+  dialog label input:not([type=checkbox]) { display:block; width:100%; margin-top:4px; padding:9px 12px; font-size:15px; }
+  dialog label.switch { display:flex; color:var(--txt); }
+  dialog .botones { display:flex; justify-content:flex-end; gap:8px; margin-top:6px; }
   @media (hover:none) { .borrar { opacity:1; } }
-  @media (max-width:600px) { .barra-herr { padding-left:16px; padding-right:16px; } }
-  @media (max-width:600px) { header, #actividad, main, #fuentes { padding-left:16px; padding-right:16px; } }
+  @media (max-width:600px) { header, #actividad, main, #fuentes, .barra-herr { padding-left:16px; padding-right:16px; } }
+  @media (prefers-reduced-motion:reduce) { *, *::before, *::after { animation-duration:.01ms !important; transition-duration:.01ms !important; } }
 </style>
 </head>
 <body>
@@ -75,11 +103,11 @@
   <button id="btnPuerto" title="Deja la TV en el puerto 5555 hasta que se reinicie">Fijar puerto</button>
   <button id="btnInstalar" title="Instala Lumbra en la TV y le da sus permisos">Instalar en la TV</button>
   <button id="btnCerrar">Cerrar vista previa</button>
-  <button id="btnSalir" title="Cierra el programa de PC. La TV sigue funcionando igual">Salir</button>
+  <button id="btnSalir" hidden title="Cierra el programa de PC. La TV sigue funcionando igual">Salir</button>
   <label class="switch" title="Volumen del fondo en la TV">Volumen
     <input type="range" id="vol" min="0" max="100" step="5" style="width:110px;padding:0" aria-label="Volumen del fondo">
     <span id="volTxt" style="min-width:36px">0 %</span></label>
-  <label class="switch"><input type="checkbox" id="auto" style="width:auto"> Automático</label>
+  <label class="switch" title="Pone de fondo cada video nuevo que aparezca en tus carpetas"><input type="checkbox" id="auto"> Automático</label>
 </header>
 <div id="actividad"><span id="msg">Cargando…</span><div class="barra" id="barra" hidden><i id="barraIn"></i></div></div>
 <section id="fuentes">
@@ -87,11 +115,11 @@
   <span id="listaCarpetas"></span>
   <button id="btnCarpeta">Añadir carpeta</button>
   <button id="btnFotos" title="Elige una o varias fotos: llegan a la TV en HD (1080p)">Subir fotos al salvapantallas</button>
-  <label class="switch" id="etqWE"><input type="checkbox" id="usarWE" style="width:auto"> Incluir Wallpaper Engine</label>
+  <label class="switch" id="etqWE"><input type="checkbox" id="usarWE"> Incluir Wallpaper Engine</label>
   <label class="switch">Calidad
     <select id="resolucion"><option value="auto">Automática</option><option value="1280x720">720p (más fluido)</option><option value="1920x1080">1080p</option></select>
   </label>
-  <p id="faltan" hidden></p>
+  <p id="faltan" hidden><span id="faltanTxt"></span><button id="btnHerramientas" class="primario" hidden>Descargar lo que falta</button></p>
 </section>
 <div class="barra-herr">
   <input id="buscar" type="search" placeholder="Buscar…" aria-label="Buscar fondo">
@@ -101,21 +129,49 @@
 <main id="galeria"></main>
 <div id="toast" class="oculto" role="status" aria-live="polite"><span class="spin"></span><span id="toastTxt"></span></div>
 
+<dialog id="dlgEmparejar">
+  <form method="dialog">
+    <h2>Emparejar con la TV</h2>
+    <p>Solo la primera vez. En la TV abre <b>Depuración inalámbrica → Emparejar dispositivo con código</b> y copia lo que aparece en esa ventana.</p>
+    <label>IP y puerto de esa ventana<input id="parDir" placeholder="192.168.1.50:37123" autocomplete="off" required></label>
+    <label>Código de 6 dígitos<input id="parCodigo" inputmode="numeric" maxlength="6" pattern="\d{6}" placeholder="123456" autocomplete="off" required></label>
+    <div class="botones"><button type="button" data-cerrar>Cancelar</button><button class="primario" value="ok">Emparejar</button></div>
+  </form>
+</dialog>
+<dialog id="dlgQuitar">
+  <form method="dialog">
+    <h2 id="quitarTitulo"></h2>
+    <p>Se borra su versión convertida. El original no se toca y puedes recuperarlo con «Restaurar todos».</p>
+    <label class="switch" id="quitarWE" title="Úsalo si ya te desuscribiste en Steam y sigue apareciendo. Si sigues suscrito, Steam lo volverá a descargar.">
+      <input type="checkbox" id="quitarPc"> Borrar también sus archivos de Wallpaper Engine en la PC</label>
+    <div class="botones"><button type="button" data-cerrar>Cancelar</button><button class="primario" value="ok">Quitar</button></div>
+  </form>
+</dialog>
+
 <script>
 const $ = id => document.getElementById(id);
-const post = (url, body) => fetch(url, {method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify(body||{})}).then(r => r.json());
+const CLAVE = "__CLAVE__";
+const post = (url, body) => fetch(url, {method:"POST", headers:{"Content-Type":"application/json", "X-Lumbra":CLAVE}, body: JSON.stringify(body||{})}).then(r => r.json());
 
+// ---------- galería ----------
+let titulos = {}, galeriaAnterior = "";
 async function cargarGaleria() {
-  const items = await fetch("/api/items").then(r => r.json());
-  $("galeria").innerHTML = items.map(i => `
-    <div class="card ${i.actual ? "actual" : ""}" data-id="${i.id}" data-origen="${i.origen}">
-      <div class="thumb" style="${i.preview ? `background-image:url(/preview/${i.id})` : ""}">
+  const texto = await fetch("/api/items").then(r => r.text());
+  if (texto === galeriaAnterior) return;   // nada cambió: no se redibuja ni parpadea
+  const primera = !galeriaAnterior;
+  galeriaAnterior = texto;
+  const items = JSON.parse(texto);
+  const viejas = new Set([...document.querySelectorAll(".card")].map(c => c.dataset.id));
+  $("galeria").innerHTML = items.map((i, n) => `
+    <div class="card ${i.actual ? "actual" : ""} ${primera || !viejas.has(i.id) ? "nueva" : ""}" style="--n:${n}" data-id="${i.id}" data-origen="${i.origen}">
+      <div class="thumb">
+        ${i.preview ? `<img loading="lazy" decoding="async" alt="" src="/preview/${i.id}?v=${i.v}">` : ""}
         ${i.actual ? '<span class="tag fondo">Fondo actual</span>' : i.cache ? '<span class="tag">Listo para TV</span>' : `<span class="tag">${i.tipo === "imagen" ? "Imagen" : "Video"}</span>`}
         <button class="borrar" data-a="eliminar" data-id="${i.id}" title="Quitar de la galería" aria-label="Quitar de la galería">🗑</button>
       </div>
       <div class="info">
         <div class="titulo"></div>
-        <div class="meta">${i.mb} MB${i.cache ? " · convertido" : ""}</div>
+        <div class="meta">${i.mb || "<1"} MB${i.cache ? " · convertido" : ""}</div>
         <div class="acciones">
           ${i.tipo === "imagen" ? `<button data-a="salva" data-id="${i.id}">Al salvapantallas</button>` : `<button data-a="ver" data-id="${i.id}">Ver en TV</button>`}
           <button class="primario" data-a="fondo" data-id="${i.id}">Poner de fondo</button>
@@ -123,11 +179,15 @@ async function cargarGaleria() {
       </div>
     </div>`).join("") || '<p style="color:var(--sub)">Todavía no hay fondos. Añade arriba una carpeta con videos o fotos.</p>';
   document.querySelectorAll(".titulo").forEach((el, n) => el.textContent = items[n].titulo);
+  document.querySelectorAll(".thumb img").forEach(img => {
+    if (img.complete && img.naturalWidth) img.classList.add("lista");
+    img.onload = () => img.classList.add("lista");
+    img.onerror = () => img.remove();
+  });
   titulos = Object.fromEntries(items.map(i => [i.id, i.titulo]));
   filtrar();
 }
 
-let titulos = {};
 const normal = t => t.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
 function filtrar() {
   const q = normal($("buscar").value.trim());
@@ -150,19 +210,27 @@ function toast(texto, tipo) {
   if (tipo) toastTimer = setTimeout(() => $("toast").classList.add("oculto"), 6000);
 }
 
-$("galeria").addEventListener("click", e => {
+// ---------- ventanas de diálogo ----------
+document.querySelectorAll("dialog [data-cerrar]").forEach(b => b.onclick = () => b.closest("dialog").close());
+/** Abre el diálogo y resuelve true si se aceptó. */
+function preguntar(dlg) {
+  return new Promise(resolver => {
+    dlg.returnValue = "";
+    dlg.addEventListener("close", () => resolver(dlg.returnValue === "ok"), {once:true});
+    dlg.showModal();
+  });
+}
+
+$("galeria").addEventListener("click", async e => {
   const b = e.target.closest("button[data-a]");
   if (!b) return;
   if (b.dataset.a === "eliminar") {
-    const t = titulos[b.dataset.id] || "este fondo";
-    const esWE = b.closest(".card").dataset.origen === "wallpaper_engine";
-    if (!confirm(`¿Quitar «${t}» de la galería?
-
-Se borra su versión convertida y puedes recuperarlo con «Restaurar todos».`)) return;
-    const borrarPc = esWE && confirm(`¿Borrar también sus archivos de la PC?
-
-Úsalo si ya te desuscribiste en Steam y sigue apareciendo. Si sigues suscrito, Steam lo volverá a descargar.`);
-    post(`/api/eliminar/${b.dataset.id}`, {borrar_pc: borrarPc}).then(cargarGaleria);
+    $("quitarTitulo").textContent = `¿Quitar «${titulos[b.dataset.id] || "este fondo"}» de la galería?`;
+    $("quitarWE").hidden = b.closest(".card").dataset.origen !== "wallpaper_engine";
+    $("quitarPc").checked = false;
+    if (!await preguntar($("dlgQuitar"))) return;
+    await post(`/api/eliminar/${b.dataset.id}`, {borrar_pc: $("quitarPc").checked});
+    cargarGaleria();
     return;
   }
   toast(b.dataset.a === "fondo" ? "Preparando el fondo…" : "Preparando el archivo para la TV…");
@@ -175,13 +243,14 @@ $("btnSalir").onclick = async () => {
   document.body.innerHTML = '<p style="padding:40px;font-size:18px">Lumbra se cerró. Ya puedes cerrar esta pestaña.</p>';
 };
 $("btnInstalar").onclick = () => { toast("Preparando Lumbra en la TV…"); post("/api/instalar"); };
+$("btnHerramientas").onclick = () => { toast("Descargando lo que falta…"); post("/api/herramientas"); };
 $("btnEmparejar").onclick = async () => {
-  const direccion = prompt("Primera vez: en la TV abre Depuración inalámbrica → «Emparejar dispositivo con código».\n\nEscribe la IP:puerto que aparece en ESA ventana:");
-  if (!direccion) return;
-  const codigo = prompt("Ahora el código de 6 dígitos:");
-  if (!codigo) return;
-  const r = await post("/api/emparejar", {direccion, codigo});
-  $("msg").textContent = r.ok ? "Emparejada. Ahora escribe arriba la IP:puerto de la pantalla principal de Depuración inalámbrica y pulsa Conectar." : "No se pudo emparejar. Revisa el código y el puerto.";
+  $("parCodigo").value = "";
+  if (!await preguntar($("dlgEmparejar"))) return;
+  toast("Emparejando…");
+  const r = await post("/api/emparejar", {direccion: $("parDir").value.trim(), codigo: $("parCodigo").value.trim()});
+  toast(r.ok ? "Emparejada. Ahora escribe arriba la IP:puerto de la pantalla principal de Depuración inalámbrica y pulsa Conectar."
+             : "No se pudo emparejar. Revisa el código y el puerto.", r.ok ? "ok" : "mal");
 };
 async function cargarFuentes() {
   const f = await fetch("/api/fuentes").then(r => r.json());
@@ -191,6 +260,7 @@ async function cargarFuentes() {
     el.className = "carpeta";
     const nombre = document.createElement("span");
     nombre.textContent = c;
+    nombre.title = c;
     const quitar = document.createElement("button");
     quitar.textContent = "✕";
     quitar.title = "Quitar esta carpeta (no borra nada)";
@@ -225,26 +295,29 @@ $("btnConectar").onclick = async () => {
   const r = await post("/api/conectar", {direccion: $("dir").value.trim()});
   $("msg").textContent = r.ok ? `Conectado a ${r.tv}` : "No se pudo conectar. Revisa el puerto en la TV.";
 };
+$("dir").onkeydown = e => { if (e.key === "Enter") $("btnConectar").click(); };
 $("btnPuerto").onclick = async () => {
   $("msg").textContent = "Fijando puerto 5555…";
   const r = await post("/api/fijar-puerto");
   $("msg").textContent = r.ok ? `Listo, la TV queda en ${r.tv} hasta que se reinicie` : "No se pudo fijar el puerto";
 };
 
+// ---------- estado ----------
 let ultimo = "", dirCargado = false;
 async function estado() {
   try {
     const s = await fetch("/api/estado").then(r => r.json());
     $("auto").checked = s.automatico;
-    const faltan = [!s.adb && "ADB (platform-tools)", !s.ffmpeg && "FFmpeg"].filter(Boolean);
-    $("faltan").hidden = !faltan.length;
-    $("faltan").textContent = faltan.length ? `Falta instalar en esta PC: ${faltan.join(" y ")}. Sin esto no se pueden preparar ni enviar fondos.` : "";
+    $("btnSalir").hidden = s.ventana;   // con ventana propia basta con cerrarla
+    $("faltan").hidden = !s.faltan.length;
+    $("faltanTxt").textContent = s.faltan.length ? `Falta en esta PC: ${s.faltan.join(" y ")}. Sin esto no se pueden preparar ni enviar fondos.` : "";
+    $("btnHerramientas").hidden = !s.descargables || s.ocupado;
     $("btnInstalar").title = s.apk ? "Instala Lumbra en la TV y le da sus permisos" : "No hay APK junto al programa: solo da los permisos a un Lumbra ya instalado";
     $("btnRestaurar").hidden = !s.ocultos;
     $("btnRestaurar").textContent = `Restaurar todos (${s.ocultos})`;
     if (!volTocado && !s.ocupado) { $("vol").value = s.volumen; $("volTxt").textContent = s.volumen + " %"; }
     $("tvTxt").textContent = s.tv ? `TV ${s.tv}` : "TV sin conectar";
-    $("tvDot").style.background = s.tv ? "var(--ok)" : "var(--sub)";
+    $("tvDot").classList.toggle("on", !!s.tv);
     if (!dirCargado && s.tv) { $("dir").value = s.tv; dirCargado = true; }
     const msg = s.error ? `${s.mensaje}: ${s.error}` : s.mensaje + (s.pendientes ? ` (${s.pendientes} en cola)` : "");
     $("msg").textContent = msg;
@@ -260,13 +333,20 @@ async function estado() {
     } else if (s.ocupado && s.progreso != null) {
       $("toastTxt").textContent = `${s.mensaje} ${s.progreso}%`;
     }
-    if (msg !== ultimo) { ultimo = msg; cargarGaleria(); }
+    if (msg !== ultimo) { ultimo = msg; }
+    cargarGaleria();
   } catch { $("msg").textContent = "El programa no está corriendo"; }
 }
+// con la ventana minimizada o tapada no hace falta preguntar tan seguido
+let reloj;
+function programar() {
+  clearInterval(reloj);
+  reloj = setInterval(estado, document.hidden ? 8000 : 1500);
+}
+document.addEventListener("visibilitychange", () => { programar(); if (!document.hidden) estado(); });
 cargarFuentes();
-cargarGaleria();
 estado();
-setInterval(estado, 1500);
+programar();
 </script>
 </body>
 </html>

@@ -17,6 +17,7 @@ Desde el engrane en la pantalla de inicio de la TV:
 - **Apariencia:** color del tema, tamaño y forma de las tarjetas, nombres de las apps y posición de la fila.
 - **Reloj:** 12 o 24 horas, con fecha o sin ella, o sin reloj.
 - **Apps:** ordenar, ocultar y volver a mostrar.
+- **Música:** una tarjeta con lo que suena y sus controles. Indica si suena en la TV o en otro dispositivo (por ejemplo, Spotify en tu teléfono); en ese caso el sonido del fondo no se corta.
 - **Salvapantallas:** el de Lumbra o el de tu TV; carpeta de fotos, tiempo por foto, zoom y hora.
 - **Modo ligero:** para TV con poca memoria. El video queda como imagen fija y sin sonido, y las tarjetas no se agrandan ni brillan.
 
@@ -26,12 +27,14 @@ Necesitas una TV con Android TV o Google TV y activar en ella las **Opciones de 
 
 ### Opción A: con el programa de PC (lo más fácil)
 
-1. Instala [FFmpeg](https://ffmpeg.org/download.html) y [ADB](https://developer.android.com/tools/releases/platform-tools).
-2. Descarga de la sección **Releases** `Lumbra.exe` y `lumbra.apk`, y déjalos en la misma carpeta.
-3. Abre `Lumbra.exe` con doble clic. Se abre en tu navegador; para cerrarlo, pulsa **Salir**. En Linux o macOS instala [Python 3.10 o superior](https://www.python.org/downloads/) y ejecuta `python3 pc/app.py`.
+1. Descarga de la sección **Releases** `Lumbra.exe` y `lumbra.apk`, y déjalos en la misma carpeta.
+2. Abre `Lumbra.exe` con doble clic. Se abre en su propia ventana, como cualquier programa; para cerrarlo, cierra la ventana.
+3. Si te avisa de que falta ADB o FFmpeg, pulsa **Descargar lo que falta**: los baja de sus sitios oficiales y los guarda en la carpeta de datos de Lumbra, sin instalar nada más en tu PC.
 4. **Solo la primera vez:** pulsa **Emparejar** y escribe la IP, el puerto y el código que muestra la TV en «Emparejar dispositivo con código».
 5. Escribe la IP y el puerto de la pantalla principal de Depuración inalámbrica y pulsa **Conectar**.
 6. Pulsa **Instalar en la TV**. También deja a Lumbra como pantalla de inicio y le da sus permisos.
+
+En Linux o macOS no hay ejecutable: instala [Python 3.10 o superior](https://www.python.org/downloads/), [FFmpeg](https://ffmpeg.org/download.html) y [ADB](https://developer.android.com/tools/releases/platform-tools), y ejecuta `python3 pc/app.py`. Con `pip install pywebview` se abre en ventana propia; sin él, en tu navegador.
 
 Luego pulsa **Añadir carpeta** para elegir dónde tienes tus videos o fotos. No hay rutas que configurar: si tienes Wallpaper Engine lo detecta solo, y si no lo tienes, no hace falta.
 
@@ -81,7 +84,11 @@ flutter build apk --release --target-platform android-arm,android-arm64
 Para crear `Lumbra.exe` desde `pc/`:
 
 ```bash
-pyinstaller --onefile --noconsole --name Lumbra --add-data "web;web" app.py
+pip install -r requirements.txt pyinstaller pillow
+```
+
+```bash
+pyinstaller --onefile --noconsole --name Lumbra --add-data "web;web" --icon ../tv/android/app/src/main/res/mipmap-xxxhdpi/ic_launcher.png app.py
 ```
 
 Para medir el rendimiento en la TV: `flutter build apk --release --dart-define=MEDIR=true` escribe en el registro cuánto tarda cada cuadro.

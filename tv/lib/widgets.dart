@@ -371,11 +371,20 @@ class Reproduciendo extends StatelessWidget {
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: TextStyle(color: Tema.texto, fontSize: 17, fontWeight: FontWeight.w600)),
-                if (musica.artista != null)
-                  Text(musica.artista!,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(color: Tema.textoSuave, fontSize: 14)),
+                // dónde suena: en esta TV o en otro aparato (teléfono, PC…) que la TV solo muestra
+                Row(mainAxisSize: MainAxisSize.min, children: [
+                  Icon(musica.remoto ? Icons.devices_rounded : Icons.tv_rounded,
+                      size: 15, color: musica.remoto ? Tema.rojo : Tema.textoSuave),
+                  const SizedBox(width: 6),
+                  Flexible(
+                    child: Text(
+                        [if (musica.remoto) 'En otro dispositivo' else if (musica.artista == null) 'En esta TV', ?musica.artista]
+                            .join('  ·  '),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(color: Tema.textoSuave, fontSize: 14)),
+                  ),
+                ]),
               ],
             ),
           ),
@@ -402,15 +411,17 @@ class Barras extends StatefulWidget {
   State<Barras> createState() => _BarrasState();
 }
 
-class _BarrasState extends State<Barras> {
+class _BarrasState extends State<Barras> with WidgetsBindingObserver {
   // 15 cuadros por segundo: a 60 la TV redibujaba toda la pantalla sin parar mientras sonaba música
   static const _paso = Duration(milliseconds: 66);
   Timer? _timer;
   double _valor = 0;
+  bool _visible = true;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _ajustar();
   }
 
@@ -420,10 +431,18 @@ class _BarrasState extends State<Barras> {
     _ajustar();
   }
 
+  // con otra app delante (p. ej. Spotify sonando) el launcher no se ve: no tiene sentido animar
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    _visible = state == AppLifecycleState.resumed;
+    _ajustar();
+  }
+
   void _ajustar() {
-    if (widget.activas && !Config.i.ligero && _timer == null) {
+    final animar = widget.activas && _visible && !Config.i.ligero;
+    if (animar && _timer == null) {
       _timer = Timer.periodic(_paso, (_) => setState(() => _valor = (_valor + 66 / 1400) % 1));
-    } else if (!widget.activas || Config.i.ligero) {
+    } else if (!animar) {
       _timer?.cancel();
       _timer = null;
     }
@@ -431,6 +450,7 @@ class _BarrasState extends State<Barras> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _timer?.cancel();
     super.dispose();
   }

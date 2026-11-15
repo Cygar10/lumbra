@@ -1,0 +1,2 @@
+# ventana propia del programa; sin esto se abre en el navegador
+pywebview>=5

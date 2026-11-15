@@ -24,6 +24,9 @@ class Musica {
   final String titulo;
   final String? artista;
   final bool sonando;
+
+  /// suena en otro aparato (teléfono, PC, otra TV) y la app de la TV solo lo muestra
+  final bool remoto;
   final Uint8List? portada;
 
   Musica.desde(Map m)
@@ -31,11 +34,12 @@ class Musica {
         titulo = m['title'] as String,
         artista = m['artist'] as String?,
         sonando = m['playing'] as bool,
+        remoto = m['remote'] as bool? ?? false,
         portada = m['art'] as Uint8List?;
 
-  Musica._(this.paquete, this.titulo, this.artista, this.sonando, this.portada);
+  Musica._(this.paquete, this.titulo, this.artista, this.sonando, this.remoto, this.portada);
 
-  Musica conPortada(Uint8List? p) => Musica._(paquete, titulo, artista, sonando, p);
+  Musica conPortada(Uint8List? p) => Musica._(paquete, titulo, artista, sonando, remoto, p);
 }
 
 /// Un archivo o carpeta del explorador. tipo: dir, video o image.

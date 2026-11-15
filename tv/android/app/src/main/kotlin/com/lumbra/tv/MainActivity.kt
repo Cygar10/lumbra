@@ -79,9 +79,8 @@ class MainActivity : FlutterActivity() {
         window.setBackgroundDrawable(android.graphics.drawable.ColorDrawable(android.graphics.Color.BLACK))
         video = WallpaperPlayer(this, surface)
         fondo = Fondo(this, cuadro, video)
-        musica = MediaWatcher(this) { datos ->
+        musica = MediaWatcher(this, { sonando -> video.otraMusicaSonando(sonando) }) { datos ->
             ultimaMusica = datos
-            video.otraMusicaSonando(musica.hayMusica())
             enviar(mapOf("type" to "media", "media" to datos))
         }
         Ajustes.alCambiar = {
@@ -195,7 +194,12 @@ class MainActivity : FlutterActivity() {
     private fun raices(): List<Map<String, Any?>> {
         val gestor = getSystemService(STORAGE_SERVICE) as StorageManager
         return gestor.storageVolumes.mapNotNull { v ->
-            val carpeta = v.directory ?: return@mapNotNull null
+            // StorageVolume.directory llegó con Android 11; antes la ruta solo se lee por reflexión
+            val carpeta = (if (Build.VERSION.SDK_INT >= 30) v.directory else try {
+                (v.javaClass.getMethod("getPath").invoke(v) as? String)?.let(::File)
+            } catch (_: Exception) {
+                null
+            }) ?: return@mapNotNull null
             if (v.state != Environment.MEDIA_MOUNTED) return@mapNotNull null
             mapOf("name" to v.getDescription(this), "path" to carpeta.absolutePath)
         }
@@ -423,7 +427,8 @@ class MainActivity : FlutterActivity() {
      * para que las tarjetas tengan el mismo fondo del tema.
      */
     private fun soloLogo(icono: Drawable): Bitmap? {
-        if (icono is AdaptiveIconDrawable && icono.foreground != null) {
+        // los iconos adaptables existen desde Android 8
+        if (Build.VERSION.SDK_INT >= 26 && icono is AdaptiveIconDrawable && icono.foreground != null) {
             // la capa frontal ya es solo el logo; algunas traen además un cuadro blanco
             val frente = aBitmap(icono.foreground, 256)
             return quitarFondo(frente, soloBlanco = true) ?: centrar(frente) ?: aBitmap(icono, 256)

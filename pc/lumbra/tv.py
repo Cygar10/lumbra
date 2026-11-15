@@ -1,9 +1,10 @@
 """Control de la TV por ADB: instalar Lumbra, poner fondos y mandar fotos."""
 import os
 import re
-import shutil
 import subprocess
 import time
+
+from lumbra import herramientas
 
 FLAGS = subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0
 LUMBRA = "com.lumbra.tv"
@@ -11,32 +12,18 @@ CARPETA_APP = f"/sdcard/Android/data/{LUMBRA}/files"
 CARPETA_VISTA = "/sdcard/Movies/Lumbra"
 
 
-def encontrar_adb():
-    """Lo busca en el PATH y en los sitios donde lo dejan el SDK de Android y los instaladores."""
-    ruta = shutil.which("adb")
-    if ruta:
-        return ruta
-    exe = "adb.exe" if os.name == "nt" else "adb"
-    inicio = os.path.expanduser("~")
-    posibles = [os.environ.get("ANDROID_HOME"), os.environ.get("ANDROID_SDK_ROOT"),
-                os.path.join(os.environ.get("LOCALAPPDATA", ""), "Android", "Sdk"),
-                r"C:\Android\Sdk", os.path.join(inicio, "Android", "Sdk"),
-                os.path.join(inicio, "Library", "Android", "sdk")]
-    for base in posibles:
-        if base and os.path.isfile(os.path.join(base, "platform-tools", exe)):
-            return os.path.join(base, "platform-tools", exe)
-    return None
-
-
 class TV:
     def __init__(self, cfg):
         self.cfg = cfg
         self.serial = cfg.get("tv_address") or None
-        self.adb = encontrar_adb()
+
+    @property
+    def adb(self):
+        return herramientas.buscar("adb")
 
     def _run(self, *args, timeout=60, serial=True):
         if not self.adb:
-            raise RuntimeError("Falta ADB (Android platform-tools). Instálalo y vuelve a abrir Lumbra: "
+            raise RuntimeError("Falta ADB. Pulsa «Descargar lo que falta» o instálalo desde "
                                "https://developer.android.com/tools/releases/platform-tools")
         cmd = [self.adb] + (["-s", self.serial] if serial and self.serial else []) + list(args)
         r = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout,

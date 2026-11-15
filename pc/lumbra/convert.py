@@ -6,20 +6,34 @@ import json
 import math
 import os
 import re
-import shutil
 import subprocess
 from fractions import Fraction
 
-from lumbra import loopmp4
+from lumbra import herramientas, loopmp4
 
 FLAGS = subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0
 
 
 def herramienta(nombre):
-    ruta = shutil.which(nombre)
+    ruta = herramientas.buscar(nombre)
     if not ruta:
-        raise RuntimeError(f"Falta {nombre}. Instala FFmpeg (https://ffmpeg.org/download.html) y vuelve a abrir Lumbra")
+        raise RuntimeError("Falta FFmpeg. Pulsa «Descargar lo que falta» o instálalo desde https://ffmpeg.org/download.html")
     return ruta
+
+
+def miniatura(origen, destino, es_video):
+    """Imagen pequeña para la galería: cargar los originales enteros la hacía lenta."""
+    tmp = destino + ".part.jpg"
+    cmd = [herramienta("ffmpeg"), "-y", "-v", "error"] + (["-ss", "1"] if es_video else []) + [
+        "-i", origen, "-frames:v", "1", "-vf", "scale=480:-2:flags=bilinear", "-q:v", "5", tmp]
+    r = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace",
+                       creationflags=FLAGS, timeout=60)
+    if r.returncode != 0 or not os.path.isfile(tmp):
+        if os.path.exists(tmp):
+            os.remove(tmp)
+        raise RuntimeError(r.stderr.strip()[-200:])
+    os.replace(tmp, destino)
+    return destino
 
 
 def duracion(video):

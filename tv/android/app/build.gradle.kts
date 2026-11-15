@@ -1,11 +1,31 @@
+import java.util.Properties
+
 plugins {
     id("com.android.application")
     // The Flutter Gradle Plugin must be applied after the Android and Kotlin Gradle plugins.
     id("dev.flutter.flutter-gradle-plugin")
 }
 
+// Firma de los APK que se publican: los datos van en android/key.properties (no se sube al repositorio)
+// con storeFile, storePassword, keyAlias y keyPassword. Sin ese archivo se firma con la llave de depuración.
+val firma = Properties().apply {
+    val archivo = rootProject.file("key.properties")
+    if (archivo.isFile) archivo.inputStream().use { load(it) }
+}
+
 android {
     namespace = "com.lumbra.tv"
+
+    signingConfigs {
+        if (firma.containsKey("storeFile")) {
+            create("release") {
+                storeFile = file(firma.getProperty("storeFile"))
+                storePassword = firma.getProperty("storePassword")
+                keyAlias = firma.getProperty("keyAlias")
+                keyPassword = firma.getProperty("keyPassword")
+            }
+        }
+    }
     compileSdk = flutter.compileSdkVersion
     ndkVersion = flutter.ndkVersion
 
@@ -31,9 +51,8 @@ android {
 
     buildTypes {
         release {
-            // TODO: Add your own signing config for the release build.
-            // Signing with the debug keys for now, so `flutter run --release` works.
-            signingConfig = signingConfigs.getByName("debug")
+            // actualizar una app instalada exige la misma firma: por eso la publicada usa una llave fija
+            signingConfig = signingConfigs.findByName("release") ?: signingConfigs.getByName("debug")
         }
     }
 }

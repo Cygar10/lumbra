@@ -1,23 +1,28 @@
 """Lumbra para PC: galería local de fondos para el launcher de la TV.
 
-Abre http://localhost:8770 , elige un video o una imagen y mándalo a la TV. Es opcional: el
+Se abre en su propia ventana: eliges un video o una imagen y lo mandas a la TV. Es opcional: el
 launcher funciona solo, con los archivos de la TV. Las conversiones se guardan en datos/cache/.
+
+Por dentro es una página servida solo a este equipo (127.0.0.1) y mostrada con el navegador
+integrado del sistema. Con --navegador, o si ese componente falta, se abre en el navegador normal.
 """
 import glob
 import json
 import mimetypes
 import os
 import queue
+import secrets
 import shutil
 import subprocess
 import sys
 import threading
 import time
+import urllib.request
 import webbrowser
 import zlib
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-from lumbra import convert, fuentes
+from lumbra import convert, fuentes, herramientas
 from lumbra.tv import TV
 
 def _modo_selector():
@@ -48,6 +53,11 @@ CACHE = os.path.join(DATOS, "cache")
 ESTADO_PATH = os.path.join(DATOS, "estado.json")
 CONFIG_PATH = os.path.join(DATOS, "config.json")
 os.makedirs(CACHE, exist_ok=True)
+herramientas.CARPETA = os.path.join(DATOS, "herramientas")
+
+# solo la página que sirve este programa conoce la clave: otra web abierta en el equipo no puede darle órdenes
+CLAVE = secrets.token_urlsafe(24)
+VENTANA = None  # la ventana propia, cuando no se usa el navegador
 
 PREDETERMINADO = {
     "carpetas": [],
@@ -89,6 +99,7 @@ CFG = cargar_config()
 def guardar_config():
     with open(CONFIG_PATH, "w", encoding="utf-8") as f:
         json.dump(CFG, f, indent=2, ensure_ascii=False)
+    _escaneo["hora"] = 0.0
 
 
 def recordar_tv(direccion):
@@ -124,8 +135,37 @@ def avisar(mensaje, item_id=None, progreso=None, error=None):
                      n=ACTIVIDAD["n"] + 1)
 
 
+_escaneo = {"hora": 0.0, "items": []}
+_escaneo_lock = threading.Lock()
+
+
+def escanear():
+    """La página pregunta cada segundo y medio: las carpetas se recorren como mucho cada cuatro."""
+    with _escaneo_lock:
+        if time.monotonic() - _escaneo["hora"] > 4:
+            _escaneo.update(items=fuentes.escanear(CFG), hora=time.monotonic())
+        return _escaneo["items"]
+
+
 def items_por_id():
-    return {i["id"]: i for i in fuentes.escanear(CFG)}
+    return {i["id"]: i for i in escanear()}
+
+
+_miniaturas = threading.Semaphore(2)
+
+
+def miniatura(item):
+    """Vista pequeña para la galería. Sin FFmpeg se sirve la imagen original (y de los videos, nada)."""
+    if item["origen"] == "wallpaper_engine":
+        return item["preview"]
+    destino = os.path.join(CACHE, f"mini_{item['id']}_{int(item['fecha'])}.jpg")
+    if os.path.isfile(destino):
+        return destino
+    try:
+        with _miniaturas:
+            return convert.miniatura(item["ruta"], destino, item["tipo"] == "video")
+    except (RuntimeError, OSError, subprocess.TimeoutExpired):
+        return item["preview"]
 
 
 def ajustes_conversion():
@@ -216,6 +256,12 @@ def trabajador():
                 tv.cerrar_vista()
                 avisar("Vista previa cerrada")
                 continue
+            if accion == "herramientas":
+                for nombre in herramientas.faltan():
+                    herramientas.descargar(nombre, lambda p: avisar(
+                        f"Descargando {herramientas.NOMBRES[nombre]}…", progreso=p))
+                avisar("Listo: ya está todo lo necesario en esta PC")
+                continue
             if accion == "instalar":
                 asegurar_tv()
                 tv.preparar_lumbra(apk_incluido(), avisar)
@@ -305,7 +351,16 @@ def elegir_fotos():
 
 
 def _selector(funcion, **opciones):
-    """Abre el selector de archivos del sistema, en otro proceso para no trabar el servidor."""
+    """Abre el selector de archivos del sistema."""
+    if VENTANA is not None:
+        import webview
+        if funcion == "askdirectory":
+            elegido = VENTANA.create_file_dialog(webview.FOLDER_DIALOG)
+        else:
+            tipos = tuple(f"{nombre} ({patron.replace(' ', ';')})" for nombre, patron in opciones.get("filetypes", []))
+            elegido = VENTANA.create_file_dialog(webview.OPEN_DIALOG, allow_multiple=True, file_types=tipos)
+        return "\n".join(elegido) if elegido else None
+    # sin ventana propia: con tkinter, en otro proceso para no trabar el servidor
     salida = os.path.join(DATOS, "selector.txt")
     if os.path.exists(salida):
         os.remove(salida)
@@ -343,20 +398,38 @@ class Handler(BaseHTTPRequestHandler):
             while chunk := f.read(1 << 16):
                 self.wfile.write(chunk)
 
+    def _de_confianza(self, con_clave):
+        """Solo se atiende a la página de este programa: ni a otras webs ni a nombres ajenos que apunten aquí."""
+        anfitrion = (self.headers.get("Host") or "").split(":")[0]
+        if anfitrion not in ("localhost", "127.0.0.1"):
+            return False
+        return not con_clave or secrets.compare_digest(self.headers.get("X-Lumbra") or "", CLAVE)
+
     def do_GET(self):
+        if not self._de_confianza(False):
+            self.send_error(403)
+            return
         partes = self.path.split("?")[0].strip("/").split("/")
         if partes == [""]:
-            self._archivo(os.path.join(RECURSOS, "web", "index.html"), "text/html; charset=utf-8")
+            with open(os.path.join(RECURSOS, "web", "index.html"), encoding="utf-8") as f:
+                pagina = f.read().replace("__CLAVE__", CLAVE).encode("utf-8")
+            self.send_response(200)
+            self.send_header("Content-Type", "text/html; charset=utf-8")
+            self.send_header("Content-Length", str(len(pagina)))
+            self.send_header("Cache-Control", "no-store")
+            self.end_headers()
+            self.wfile.write(pagina)
         elif partes == ["api", "items"]:
             lista = []
             ocultos = ESTADO.setdefault("ocultos", [])
-            for i in fuentes.escanear(CFG):
+            for i in escanear():
                 if i["id"] in ocultos:
                     continue
                 lista.append({"id": i["id"], "titulo": i["titulo"], "tipo": i["tipo"],
                               "origen": i["origen"],
                               "mb": round(i["tamano"] / 1e6),
-                              "preview": bool(i["preview"]),
+                              "preview": bool(i["preview"]) or bool(herramientas.buscar("ffmpeg")),
+                              "v": int(i["fecha"]),
                               "cache": en_cache(i),
                               "actual": i["id"] == ESTADO["actual"]})
             self._json(lista)
@@ -366,21 +439,36 @@ class Handler(BaseHTTPRequestHandler):
                         "ocultos": sum(1 for i in ESTADO.get("ocultos", []) if i in presentes),
                         "volumen": ESTADO.get("volumen", 0),
                         "tv": tv.serial if tv_conectada() else None, "pendientes": TRABAJOS.qsize(),
-                        "adb": bool(tv.adb), "ffmpeg": bool(shutil.which("ffmpeg")),
-                        "apk": bool(apk_incluido())})
+                        "faltan": [herramientas.NOMBRES[n] for n in herramientas.faltan()],
+                        "descargables": herramientas.se_pueden_descargar(),
+                        "ventana": VENTANA is not None, "apk": bool(apk_incluido())})
         elif partes == ["api", "fuentes"]:
             self._json({"carpetas": CFG["carpetas"], "wallpaper_engine_dir": CFG["wallpaper_engine_dir"],
                         "usar_wallpaper_engine": CFG["usar_wallpaper_engine"], "resolucion": CFG["resolucion"]})
         elif len(partes) == 2 and partes[0] == "preview" and partes[1].isdigit():
             item = items_por_id().get(partes[1])
-            self._archivo(item and item["preview"])
+            self._archivo(item and miniatura(item))
         else:
             self.send_error(404)
 
     def do_POST(self):
-        largo = int(self.headers.get("Content-Length") or 0)
-        datos = json.loads(self.rfile.read(largo) or b"{}")
         partes = self.path.strip("/").split("/")
+        if partes == ["api", "mostrar"] and self._de_confianza(False):
+            # otra copia del programa se abrió: en vez de dos ventanas, esta pasa al frente
+            if VENTANA is not None:
+                VENTANA.restore()
+                VENTANA.show()
+            self._json({"ok": True})
+            return
+        if not self._de_confianza(True):
+            self.send_error(403)
+            return
+        largo = int(self.headers.get("Content-Length") or 0)
+        try:
+            datos = json.loads(self.rfile.read(largo) or b"{}")
+        except ValueError:
+            self.send_error(400)
+            return
         if len(partes) == 3 and partes[0] == "api" and partes[1] in ("fondo", "ver", "salva") and partes[2].isdigit():
             TRABAJOS.put((partes[1], partes[2]))
             self._json({"ok": True})
@@ -392,6 +480,7 @@ class Handler(BaseHTTPRequestHandler):
             bucle = convert.ruta_bucle(CACHE, partes[2])
             if os.path.isfile(bucle):
                 os.remove(bucle)
+            _escaneo["hora"] = 0.0
             mensaje = "Quitado de la galería"
             item = items_por_id().get(partes[2])
             if datos.get("borrar_pc") and item and item["origen"] == "wallpaper_engine":
@@ -411,6 +500,9 @@ class Handler(BaseHTTPRequestHandler):
             self._json({"ok": True})
         elif partes == ["api", "cerrar"]:
             TRABAJOS.put(("cerrar", None))
+            self._json({"ok": True})
+        elif partes == ["api", "herramientas"]:
+            TRABAJOS.put(("herramientas", None))
             self._json({"ok": True})
         elif partes == ["api", "instalar"]:
             TRABAJOS.put(("instalar", None))
@@ -469,22 +561,51 @@ class Handler(BaseHTTPRequestHandler):
             self.send_error(404)
 
 
+def _ya_abierto(url):
+    """Otra copia ya está corriendo: se le pide que muestre su ventana."""
+    try:
+        urllib.request.urlopen(urllib.request.Request(url + "/api/mostrar", data=b"{}", method="POST"), timeout=3)
+    except OSError:
+        pass
+
+
+def _abrir_ventana(url):
+    """La ventana propia. Devuelve False si el equipo no tiene con qué mostrarla."""
+    global VENTANA
+    try:
+        import webview
+        VENTANA = webview.create_window("Lumbra", url, width=1180, height=800, min_size=(760, 520),
+                                        background_color="#0d0708", text_select=True)
+        webview.start()  # se queda aquí hasta que se cierra la ventana
+        return True
+    except Exception as e:  # sin WebView2 (Windows) o sin GTK/Qt (Linux): se usa el navegador
+        print(f"No se pudo abrir la ventana ({e}); se usa el navegador")
+        VENTANA = None
+        return False
+
+
 def main():
-    url = f"http://localhost:{CFG['port']}"
+    url = f"http://127.0.0.1:{CFG['port']}"
     # en Windows, reuse_address deja que dos copias usen el mismo puerto y respondan al azar
     ThreadingHTTPServer.allow_reuse_address = os.name != "nt"
+    ThreadingHTTPServer.daemon_threads = True
     try:
         servidor = ThreadingHTTPServer(("127.0.0.1", CFG["port"]), Handler)
     except OSError:
-        print(f"Lumbra ya está abierto en otra ventana: {url}")
-        webbrowser.open(url)
+        print("Lumbra ya está abierto")
+        _ya_abierto(url)
         return
     threading.Thread(target=trabajador, daemon=True).start()
     threading.Thread(target=vigilante, daemon=True).start()
-    print(f"Lumbra listo en {url}  (cierra esta ventana o pulsa Salir en la página para detenerlo)")
-    if os.environ.get("LUMBRA_NO_BROWSER") != "1":
-        webbrowser.open(url)
-    servidor.serve_forever()
+    if os.environ.get("LUMBRA_NO_BROWSER") == "1":
+        servidor.serve_forever()
+        return
+    threading.Thread(target=servidor.serve_forever, daemon=True).start()
+    if "--navegador" not in sys.argv and _abrir_ventana(url):
+        os._exit(0)  # al cerrar la ventana se cierra todo, también una conversión a medias
+    print(f"Lumbra listo en {url}  (pulsa Salir en la página para detenerlo)")
+    webbrowser.open(url)
+    threading.Event().wait()
 
 
 if __name__ == "__main__":
