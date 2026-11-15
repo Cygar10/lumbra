@@ -30,9 +30,9 @@ class TarjetaApp extends StatelessWidget {
     final radio = BorderRadius.circular(curva);
     // icono que llena la tarjeta: una imagen propia sin transparencia o un tema de iconos completos
     final lleno = app.propio != null ? (app.propioLleno ? app.propio : null) : app.completo;
-    // el tema de iconos puede pintar todos los logos de blanco o del color del tema; el color se
-    // aplica al dibujar la imagen, sin capas extra
-    final tinte = switch (cfg.temaFiltro) {
+    // el tema de iconos puede pintar sus logos de blanco o del color del tema (solo los suyos: las
+    // demás apps se quedan con su logo). El color se aplica al dibujar la imagen, sin capas extra
+    final tinte = !app.deTema ? null : switch (cfg.temaFiltro) {
       'blanco' => Colors.white,
       'acento' => Tema.rojo,
       _ => null,

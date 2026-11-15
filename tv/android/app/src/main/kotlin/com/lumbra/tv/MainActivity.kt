@@ -440,23 +440,22 @@ class MainActivity : FlutterActivity() {
                 return datos
             }
         }
-        // 2) el del tema de iconos en uso
-        val tema = Temas.activo(this)
-        val relleno = tema?.optBoolean("relleno") == true
+        // 2) el del tema de iconos en uso. Las apps que el tema no trae se quedan con su logo de siempre
         Temas.icono(this, info.packageName)?.let { archivo ->
             reducido(archivo, "tema")?.let {
+                val relleno = Temas.activo(this)?.optBoolean("relleno") == true
                 datos[if (relleno) "full" else "logo"] = it
+                datos["theme"] = true
                 return datos
             }
         }
-        // un tema de iconos completos: las apps que no trae usan su propio icono entero
-        if (relleno) iconoCompleto(info, version)?.let { datos["full"] = it }
         // el logo ya procesado se guarda: dibujar y comprimir todos los iconos tarda ~20 s en esta TV
-        val cache = File(cacheDir, "logos6/${info.packageName}_$version.png")
+        val cache = File(cacheDir, "logos7/${info.packageName}_$version.png")
         if (!cache.isFile) {
             File(cacheDir, "logos3").deleteRecursively()
             File(cacheDir, "logos4").deleteRecursively()
             File(cacheDir, "logos5").deleteRecursively()
+            File(cacheDir, "logos6").deleteRecursively()
             cache.parentFile?.mkdirs()
             cache.parentFile?.listFiles { f -> f.name.startsWith(info.packageName + "_") }?.forEach { it.delete() }
             val logo = iconoGrande(info)?.let(::soloLogo) ?: return datos
@@ -490,18 +489,6 @@ class MainActivity : FlutterActivity() {
         val h = bmp.height - 1
         return listOf(bmp.getPixel(0, 0), bmp.getPixel(w, 0), bmp.getPixel(0, h), bmp.getPixel(w, h), bmp.getPixel(w / 2, 0))
             .all { (it ushr 24) > 240 }
-    }
-
-    /** El icono tal cual, con su fondo, para los temas que llenan la tarjeta. */
-    private fun iconoCompleto(info: ActivityInfo, version: Long): ByteArray? {
-        val cache = File(cacheDir, "completos/${info.packageName}_$version.png")
-        if (!cache.isFile) {
-            cache.parentFile?.mkdirs()
-            cache.parentFile?.listFiles { f -> f.name.startsWith(info.packageName + "_") }?.forEach { it.delete() }
-            val icono = iconoGrande(info) ?: return null
-            cache.outputStream().use { aBitmap(icono, 256).compress(Bitmap.CompressFormat.PNG, 100, it) }
-        }
-        return cache.readBytes()
     }
 
     /** Guarda como icono propio de la app una imagen elegida en la TV (a 512 px como máximo). */
@@ -538,7 +525,7 @@ class MainActivity : FlutterActivity() {
             } else limpio
         }
         // si lo que queda es oscuro (p. ej. barras negras de Spotify) no se vería sobre la tarjeta
-        return if (logo != null && luminancia(logo) > 55) logo else centrar(original, 0.62f) ?: original
+        return if (logo != null && luminancia(logo) > 55) logo else centrar(original, .62f, .62f) ?: original
     }
 
     /** El color del fondo del icono, si es uno solo, vivo y se vería bien sobre la tarjeta oscura. */
@@ -675,8 +662,12 @@ class MainActivity : FlutterActivity() {
         return Bitmap.createBitmap(px, bmp.width, bmp.height, Bitmap.Config.ARGB_8888)
     }
 
-    /** Recorta lo transparente y deja el contenido centrado ocupando `tamano` del lado. */
-    private fun centrar(bmp: Bitmap, tamano: Float = 0.56f): Bitmap? {
+    /**
+     * Recorta lo transparente y lo centra. Se iguala el área visible y no el ancho: así una palabra
+     * larga (NETFLIX) y un símbolo cuadrado (Spotify) se ven del mismo tamaño. Es la misma regla
+     * que usan los temas de iconos (temas/generar.py), para que se vean parejos entre sí.
+     */
+    private fun centrar(bmp: Bitmap, ocupar: Float = .50f, maximo: Float = .80f): Bitmap? {
         val w = bmp.width
         val h = bmp.height
         val px = IntArray(w * h)
@@ -694,7 +685,10 @@ class MainActivity : FlutterActivity() {
         if (x1 < x0 || (x1 - x0) * (y1 - y0) < w * h / 60) return null
         val recorte = Bitmap.createBitmap(bmp, x0, y0, x1 - x0 + 1, y1 - y0 + 1)
         val salida = Bitmap.createBitmap(256, 256, Bitmap.Config.ARGB_8888)
-        val escala = 256 * tamano / maxOf(recorte.width, recorte.height)
+        val escala = minOf(
+            256 * ocupar / kotlin.math.sqrt(recorte.width.toFloat() * recorte.height),
+            256 * maximo / maxOf(recorte.width, recorte.height),
+        )
         val dw = recorte.width * escala
         val dh = recorte.height * escala
         Canvas(salida).drawBitmap(

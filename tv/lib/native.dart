@@ -13,6 +13,7 @@ class App {
   final Uint8List? propio; // icono que el usuario eligió para la app
   final bool propioLleno; // el icono propio no tiene transparencia: llena la tarjeta
   final Uint8List? completo; // icono entero, con su fondo, para los temas que llenan la tarjeta
+  final bool deTema; // el icono viene del tema de iconos en uso
 
   App.desde(Map m)
       : nombre = m['name'] as String,
@@ -20,7 +21,8 @@ class App {
         logo = m['logo'] as Uint8List?,
         propio = m['custom'] as Uint8List?,
         propioLleno = m['customFull'] as bool? ?? false,
-        completo = m['full'] as Uint8List?;
+        completo = m['full'] as Uint8List?,
+        deTema = m['theme'] as bool? ?? false;
 }
 
 class Musica {

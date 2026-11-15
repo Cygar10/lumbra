@@ -39,14 +39,33 @@ NOMBRES = {
     "com.cbs.ott": "Paramount+",
     "com.apple.atve.androidtv.appletv": "Apple TV",
     "com.google.android.videos": "Google TV",
+    "com.google.android.youtube.tvkids": "YouTube Kids",
+    "tv.pluto.android": "Pluto TV",
+    "com.tubitv": "Tubi",
+    "com.univision.prendetv": "ViX",
+    "com.peacocktv.peacockandroid": "Peacock",
+    "com.hulu.livingroomplus": "Hulu",
+    "com.dazn": "DAZN",
+    "com.espn.score_center": "ESPN",
+    "deezer.android.tv": "Deezer",
+    "com.amazon.music.tv": "Amazon Music",
+    "com.apple.android.music": "Apple Music",
+    "ar.tvplayer.tv": "TiviMate",
+    "org.jellyfin.androidtv": "Jellyfin",
+    "com.stremio.one": "Stremio",
+    "com.mubi": "MUBI",
+    "com.esaba.downloader": "Downloader",
 }
 
 # casos que la regla general no resuelve bien
 #   blanco: el logo es blanco sobre un fondo con degradado: se separa por lo blanco que es
 #   claro: el logo es claro (de cualquier color) sobre un fondo oscuro con degradado
 #   sin_negro: las partes negras del logo se vuelven huecos (el contorno de Twitch)
+#   claro_desde: con «claro», desde qué brillo cuenta como logo (por defecto 75)
 #   huecos_desde: qué tan blanco debe ser algo para volverse hueco (por defecto 170)
 #   huecos: en el tema blanco, las partes blancas del logo se vuelven huecos (como el ▶ de YouTube)
+#   oscuro: el logo es oscuro sobre un fondo claro con degradado (Amazon Music)
+#   amarillo: el logo es amarillo sobre un fondo con degradado (Tubi)
 #   tono: color con que se pinta el logo en el tema «color» (por defecto, el del fondo si es vivo)
 AJUSTES = {
     "com.disney.disneyplus": {"blanco": True},
@@ -58,6 +77,14 @@ AJUSTES = {
     "com.google.android.youtube.tv": {"huecos": True},
     "com.google.android.youtube.tvmusic": {"huecos": True},
     "org.videolan.vlc": {"huecos": True},
+    "com.univision.prendetv": {"blanco": True},
+    "ar.tvplayer.tv": {"claro": True, "claro_desde": 115, "huecos": False},
+    "com.apple.android.music": {"oscuro": True},
+    "com.peacocktv.peacockandroid": {"claro": True, "huecos": False},
+    "org.jellyfin.androidtv": {"claro": True, "huecos": False},
+    "com.amazon.music.tv": {"oscuro": True, "tono": (37, 209, 218)},
+    "com.tubitv": {"amarillo": True},
+    "com.google.android.youtube.tvkids": {"huecos": True},
 }
 
 TEMAS = [
@@ -121,11 +148,22 @@ def _solo_lo_blanco(im):
     return salida
 
 
-def _solo_lo_claro(im):
+def _por_alfa(im, alfa_de, color):
+    """Logo de un solo color sobre un fondo con degradado, con una regla propia para la transparencia."""
+    datos = []
+    for r, g, b, a in _pixeles(im):
+        alfa = min(1.0, max(0.0, alfa_de(r, g, b)))
+        datos.append(color + (round(alfa * a),))
+    salida = Image.new("RGBA", im.size)
+    salida.putdata(datos)
+    return salida
+
+
+def _solo_lo_claro(im, desde=75):
     """Logo claro de cualquier color sobre un fondo oscuro con degradado (Apple TV, Plex)."""
     datos = []
     for r, g, b, a in _pixeles(im):
-        alfa = min(1.0, max(0.0, (max(r, g, b) - 75) / 110))
+        alfa = min(1.0, max(0.0, (max(r, g, b) - desde) / 110))
         if alfa <= 0:
             datos.append((0, 0, 0, 0))
             continue
@@ -143,7 +181,11 @@ def extraer(paquete, icono):
     if ajuste.get("blanco"):
         return _solo_lo_blanco(icono), None
     if ajuste.get("claro"):
-        return _solo_lo_claro(icono), None
+        return _solo_lo_claro(icono, ajuste.get("claro_desde", 75)), None
+    if ajuste.get("oscuro"):
+        return _por_alfa(icono, lambda r, g, b: (170 - max(r, g, b)) / 110, (20, 20, 20)), ajuste.get("tono")
+    if ajuste.get("amarillo"):
+        return _por_alfa(icono, lambda r, g, b: (min(r, g) - b - 60) / 110, (255, 233, 0)), None
     if sum(1 for c in borde if c[3] < 40) > len(borde) * .8:
         return icono, None  # ya viene sin fondo (YouTube, Kodi…)
     # el tono medio del borde: con un degradado suave (Apple TV, Plex) también sirve
@@ -229,6 +271,18 @@ def version_blanca(paquete, logo):
     return Image.merge("RGBA", (Image.new("L", logo.size, 255),) * 3 + (alfa,))
 
 
+def version_marca(icono):
+    """El icono entero. Los que vienen sin fondo (YouTube, Kodi) se agrandan para llenar igual que los demás."""
+    caja = icono.getchannel("A").point(lambda v: 255 if v > 24 else 0).getbbox()
+    if caja and caja != (0, 0, LADO, LADO):
+        recorte = icono.crop(caja)
+        escala = LADO * .94 / max(recorte.size)
+        recorte = recorte.resize((round(recorte.width * escala), round(recorte.height * escala)), Image.LANCZOS)
+        icono = Image.new("RGBA", (LADO, LADO))
+        icono.alpha_composite(recorte, ((LADO - recorte.width) // 2, (LADO - recorte.height) // 2))
+    return icono.resize((384, 384), Image.LANCZOS)
+
+
 def main():
     for carpeta in ("color", "blanco", "marca"):
         shutil.rmtree(os.path.join(AQUI, carpeta), ignore_errors=True)
@@ -244,7 +298,7 @@ def main():
             logo = _sin_negro(logo)
         centrar(version_color(logo, fondo)).save(os.path.join(AQUI, "color", archivo), optimize=True)
         centrar(version_blanca(paquete, logo)).save(os.path.join(AQUI, "blanco", archivo), optimize=True)
-        icono.resize((384, 384), Image.LANCZOS).save(os.path.join(AQUI, "marca", archivo), optimize=True)
+        version_marca(icono).save(os.path.join(AQUI, "marca", archivo), optimize=True)
         apps.append(paquete)
         print("listo:", NOMBRES.get(paquete, paquete))
     indice = {"version": 1, "temas": [{**t, "apps": apps} for t in TEMAS]}
