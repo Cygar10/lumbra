@@ -1,0 +1,105 @@
+{
+  "version": 1,
+  "temas": [
+    {
+      "id": "color",
+      "nombre": "Color",
+      "carpeta": "color",
+      "filtro": "ninguno",
+      "relleno": false,
+      "descripcion": "Cada logo con los colores de su marca",
+      "apps": [
+        "com.amazon.amazonvideo.livingroom",
+        "com.apple.atve.androidtv.appletv",
+        "com.cbs.ott",
+        "com.crunchyroll.crunchyroid",
+        "com.disney.disneyplus",
+        "com.google.android.videos",
+        "com.google.android.youtube.tv",
+        "com.google.android.youtube.tvmusic",
+        "com.netflix.ninja",
+        "com.plexapp.android",
+        "com.spotify.tv.android",
+        "com.wbd.stream",
+        "org.videolan.vlc",
+        "org.xbmc.kodi",
+        "tv.twitch.android.app"
+      ]
+    },
+    {
+      "id": "blanco",
+      "nombre": "Blanco",
+      "carpeta": "blanco",
+      "filtro": "blanco",
+      "relleno": false,
+      "descripcion": "Todos los logos en blanco, limpio y uniforme",
+      "apps": [
+        "com.amazon.amazonvideo.livingroom",
+        "com.apple.atve.androidtv.appletv",
+        "com.cbs.ott",
+        "com.crunchyroll.crunchyroid",
+        "com.disney.disneyplus",
+        "com.google.android.videos",
+        "com.google.android.youtube.tv",
+        "com.google.android.youtube.tvmusic",
+        "com.netflix.ninja",
+        "com.plexapp.android",
+        "com.spotify.tv.android",
+        "com.wbd.stream",
+        "org.videolan.vlc",
+        "org.xbmc.kodi",
+        "tv.twitch.android.app"
+      ]
+    },
+    {
+      "id": "acento",
+      "nombre": "Tono del tema",
+      "carpeta": "blanco",
+      "filtro": "acento",
+      "relleno": false,
+      "descripcion": "Los logos con el color de tema que elijas",
+      "apps": [
+        "com.amazon.amazonvideo.livingroom",
+        "com.apple.atve.androidtv.appletv",
+        "com.cbs.ott",
+        "com.crunchyroll.crunchyroid",
+        "com.disney.disneyplus",
+        "com.google.android.videos",
+        "com.google.android.youtube.tv",
+        "com.google.android.youtube.tvmusic",
+        "com.netflix.ninja",
+        "com.plexapp.android",
+        "com.spotify.tv.android",
+        "com.wbd.stream",
+        "org.videolan.vlc",
+        "org.xbmc.kodi",
+        "tv.twitch.android.app"
+      ]
+    },
+    {
+      "id": "marca",
+      "nombre": "Iconos originales",
+      "carpeta": "marca",
+      "filtro": "ninguno",
+      "relleno": true,
+      "descripcion": "El icono completo de cada app llenando la tarjeta",
+      "apps": [
+        "com.amazon.amazonvideo.livingroom",
+        "com.apple.atve.androidtv.appletv",
+        "com.cbs.ott",
+        "com.crunchyroll.crunchyroid",
+        "com.disney.disneyplus",
+        "com.google.android.videos",
+        "com.google.android.youtube.tv",
+        "com.google.android.youtube.tvmusic",
+        "com.netflix.ninja",
+        "com.plexapp.android",
+        "com.spotify.tv.android",
+        "com.wbd.stream",
+        "org.videolan.vlc",
+        "org.xbmc.kodi",
+        "tv.twitch.android.app"
+      ]
+    }
+  ]
+}

@@ -299,6 +299,31 @@ class MainActivity : FlutterActivity() {
                     result.success(true)
                 }
                 "getMedia" -> result.success(ultimaMusica)
+                "themes" -> Thread {
+                    val lista = Temas.lista(this)
+                    main.post { result.success(lista) }
+                }.start()
+                "downloadTheme" -> Thread {
+                    val ok = try {
+                        Temas.descargar(this, call.arguments as String)
+                    } catch (e: Exception) {
+                        android.util.Log.w("Lumbra", "temas: falló la descarga ($e)")
+                        false
+                    }
+                    main.post { result.success(ok) }
+                }.start()
+                "removeTheme" -> {
+                    Temas.quitar(this, call.arguments as String)
+                    result.success(true)
+                }
+                "setCustomIcon" -> Thread {
+                    val ok = ponerIconoPropio(call.argument<String>("package")!!, call.argument<String>("path")!!)
+                    main.post { result.success(ok) }
+                }.start()
+                "removeCustomIcon" -> {
+                    iconoPropio(call.arguments as String)?.delete()
+                    result.success(true)
+                }
                 "isDefaultLauncher" -> result.success(
                     packageManager.resolveActivity(Intent(ACTION_MAIN).addCategory(CATEGORY_HOME), 0)
                         ?.activityInfo?.packageName == packageName)
@@ -406,13 +431,32 @@ class MainActivity : FlutterActivity() {
             "name" to nombre,
             "packageName" to info.packageName,
         )
-        File(getExternalFilesDir("iconos"), "${info.packageName}.png").takeIf { it.isFile }?.let {
-            datos["custom"] = it.readBytes()
-            return datos
+        // 1) el icono que el usuario eligió para esta app
+        iconoPropio(info.packageName)?.let { propio ->
+            reducido(propio, "propios")?.let {
+                datos["custom"] = it
+                // una foto o un icono sin transparencia llena la tarjeta; un logo recortado va al centro
+                datos["customFull"] = esOpaco(it)
+                return datos
+            }
         }
+        // 2) el del tema de iconos en uso
+        val tema = Temas.activo(this)
+        val relleno = tema?.optBoolean("relleno") == true
+        Temas.icono(this, info.packageName)?.let { archivo ->
+            reducido(archivo, "tema")?.let {
+                datos[if (relleno) "full" else "logo"] = it
+                return datos
+            }
+        }
+        // un tema de iconos completos: las apps que no trae usan su propio icono entero
+        if (relleno) iconoCompleto(info, version)?.let { datos["full"] = it }
         // el logo ya procesado se guarda: dibujar y comprimir todos los iconos tarda ~20 s en esta TV
-        val cache = File(cacheDir, "logos3/${info.packageName}_$version.png")
+        val cache = File(cacheDir, "logos6/${info.packageName}_$version.png")
         if (!cache.isFile) {
+            File(cacheDir, "logos3").deleteRecursively()
+            File(cacheDir, "logos4").deleteRecursively()
+            File(cacheDir, "logos5").deleteRecursively()
             cache.parentFile?.mkdirs()
             cache.parentFile?.listFiles { f -> f.name.startsWith(info.packageName + "_") }?.forEach { it.delete() }
             val logo = iconoGrande(info)?.let(::soloLogo) ?: return datos
@@ -420,6 +464,53 @@ class MainActivity : FlutterActivity() {
         }
         datos["logo"] = cache.readBytes()
         return datos
+    }
+
+    fun iconoPropio(paquete: String) = File(getExternalFilesDir("iconos"), "$paquete.png").takeIf { it.isFile }
+
+    /** La imagen reducida a 256 px con suavizado (y guardada): así no sale dentada ni gasta memoria. */
+    private fun reducido(archivo: File, carpeta: String): ByteArray? {
+        val nombre = archivo.parentFile?.name + "_" + archivo.nameWithoutExtension
+        val listo = File(cacheDir, "$carpeta/${nombre}_${archivo.lastModified()}_${archivo.length()}.png")
+        if (!listo.isFile) {
+            listo.parentFile?.mkdirs()
+            listo.parentFile?.listFiles { f -> f.name.startsWith(nombre + "_") }?.forEach { it.delete() }
+            val original = android.graphics.BitmapFactory.decodeFile(archivo.path) ?: return null
+            val lado = maxOf(original.width, original.height)
+            val chico = if (lado > 256) Bitmap.createScaledBitmap(
+                original, original.width * 256 / lado, original.height * 256 / lado, true) else original
+            listo.outputStream().use { chico.compress(Bitmap.CompressFormat.PNG, 100, it) }
+        }
+        return listo.readBytes()
+    }
+
+    private fun esOpaco(png: ByteArray): Boolean {
+        val bmp = android.graphics.BitmapFactory.decodeByteArray(png, 0, png.size) ?: return false
+        val w = bmp.width - 1
+        val h = bmp.height - 1
+        return listOf(bmp.getPixel(0, 0), bmp.getPixel(w, 0), bmp.getPixel(0, h), bmp.getPixel(w, h), bmp.getPixel(w / 2, 0))
+            .all { (it ushr 24) > 240 }
+    }
+
+    /** El icono tal cual, con su fondo, para los temas que llenan la tarjeta. */
+    private fun iconoCompleto(info: ActivityInfo, version: Long): ByteArray? {
+        val cache = File(cacheDir, "completos/${info.packageName}_$version.png")
+        if (!cache.isFile) {
+            cache.parentFile?.mkdirs()
+            cache.parentFile?.listFiles { f -> f.name.startsWith(info.packageName + "_") }?.forEach { it.delete() }
+            val icono = iconoGrande(info) ?: return null
+            cache.outputStream().use { aBitmap(icono, 256).compress(Bitmap.CompressFormat.PNG, 100, it) }
+        }
+        return cache.readBytes()
+    }
+
+    /** Guarda como icono propio de la app una imagen elegida en la TV (a 512 px como máximo). */
+    private fun ponerIconoPropio(paquete: String, ruta: String): Boolean {
+        val imagen = Imagenes.leerEntera(ruta, 512) ?: return false
+        val destino = File(getExternalFilesDir("iconos"), "$paquete.png")
+        destino.parentFile?.mkdirs()
+        destino.outputStream().use { imagen.compress(Bitmap.CompressFormat.PNG, 100, it) }
+        return true
     }
 
     /**
@@ -431,12 +522,63 @@ class MainActivity : FlutterActivity() {
         if (Build.VERSION.SDK_INT >= 26 && icono is AdaptiveIconDrawable && icono.foreground != null) {
             // la capa frontal ya es solo el logo; algunas traen además un cuadro blanco
             val frente = aBitmap(icono.foreground, 256)
-            return quitarFondo(frente, soloBlanco = true) ?: centrar(frente) ?: aBitmap(icono, 256)
+            val logo = quitarFondo(frente, soloBlanco = true) ?: centrar(frente) ?: return aBitmap(icono, 256)
+            // logo blanco sobre el color de la marca (Crunchyroll: blanco sobre naranja): al quitar el
+            // cuadro se perdía ese color, así que el logo se pinta con él
+            val marca = colorDeMarca(icono.background) ?: return logo
+            return if (esBlanco(logo)) pintar(logo, marca) else logo
         }
         val original = aBitmap(icono, 256)
-        val logo = quitarFondo(original)
+        val logo = quitarFondo(original)?.let { limpio ->
+            // igual que arriba: logo blanco sobre un cuadro del color de la marca. Se rehace sobre el
+            // icono entero para que los huecos del logo (el ojo de Crunchyroll) no se rellenen
+            val marca = colorVivo(fondoQuitado)
+            if (marca != null && esBlanco(limpio)) {
+                centrar(sinFondoEntero(original, marca))?.let { pintar(it, marca) } ?: limpio
+            } else limpio
+        }
         // si lo que queda es oscuro (p. ej. barras negras de Spotify) no se vería sobre la tarjeta
         return if (logo != null && luminancia(logo) > 55) logo else centrar(original, 0.62f) ?: original
+    }
+
+    /** El color del fondo del icono, si es uno solo, vivo y se vería bien sobre la tarjeta oscura. */
+    private fun colorDeMarca(fondo: Drawable?): Int? {
+        val muestra = aBitmap(fondo ?: return null, 32)
+        val centro = muestra.getPixel(16, 16)
+        if (listOf(muestra.getPixel(4, 4), muestra.getPixel(27, 4), muestra.getPixel(4, 27), muestra.getPixel(27, 27))
+                .any { distancia(it, centro) > 40 }) return null
+        return colorVivo(centro)
+    }
+
+    private fun colorVivo(color: Int): Int? {
+        val hsv = FloatArray(3)
+        android.graphics.Color.colorToHSV(color, hsv)
+        val brillo = 0.299 * ((color shr 16) and 255) + 0.587 * ((color shr 8) and 255) + 0.114 * (color and 255)
+        return if ((color ushr 24) > 200 && hsv[1] > .45f && brillo > 90) color else null
+    }
+
+    /** El color que borró la última llamada a quitarFondo. */
+    private var fondoQuitado = 0
+
+    private fun esBlanco(bmp: Bitmap): Boolean {
+        val px = IntArray(bmp.width * bmp.height)
+        bmp.getPixels(px, 0, bmp.width, 0, 0, bmp.width, bmp.height)
+        var visibles = 0
+        var blancos = 0
+        for (c in px) {
+            if ((c ushr 24) < 128) continue
+            visibles++
+            if (minOf((c shr 16) and 255, (c shr 8) and 255, c and 255) > 215) blancos++
+        }
+        return visibles > 0 && blancos >= visibles * 9 / 10
+    }
+
+    /** Cambia el color y conserva la transparencia, que es la que da los bordes suaves. */
+    private fun pintar(bmp: Bitmap, color: Int): Bitmap {
+        val px = IntArray(bmp.width * bmp.height)
+        bmp.getPixels(px, 0, bmp.width, 0, 0, bmp.width, bmp.height)
+        for (i in px.indices) px[i] = (px[i] and 0xFF000000.toInt()) or (color and 0x00FFFFFF)
+        return Bitmap.createBitmap(px, bmp.width, bmp.height, Bitmap.Config.ARGB_8888)
     }
 
     /** Borra el color de fondo del icono (rellenando desde los bordes) y centra el logo. */
@@ -465,9 +607,11 @@ class MainActivity : FlutterActivity() {
         // se mete un poco más para no tomar el borde suavizado
         val muestras = puntos.map { px[it!!] }
         val fondo = muestras[0]
+        fondoQuitado = fondo
         if (muestras.any { distancia(it, fondo) > 60 }) return null
         if (soloBlanco && distancia(fondo, -1) > 40) return null
         val visto = BooleanArray(w * h)
+        val borrado = BooleanArray(w * h)
         val pila = ArrayDeque<Int>()
         for (x in 0 until w) { pila.add(x); pila.add((h - 1) * w + x) }
         for (y in 0 until h) { pila.add(y * w); pila.add(y * w + w - 1) }
@@ -479,6 +623,7 @@ class MainActivity : FlutterActivity() {
             val c = px[i]
             if ((c ushr 24) >= 40 && distancia(c, fondo) > 70) continue
             px[i] = 0
+            borrado[i] = true
             val x = i % w
             val y = i / w
             if (x > 0) pila.add(i - 1)
@@ -486,7 +631,48 @@ class MainActivity : FlutterActivity() {
             if (y > 0) pila.add(i - w)
             if (y < h - 1) pila.add(i + w)
         }
+        // la orilla del logo es una mezcla con el fondo: sin esto queda dentada o con un halo de su color
+        for (y in 0 until h) for (x in 0 until w) {
+            val i = y * w + x
+            if (borrado[i]) continue
+            var cerca = false
+            for (dy in -2..2) for (dx in -2..2) {
+                val nx = x + dx
+                val ny = y + dy
+                if (nx in 0 until w && ny in 0 until h && borrado[ny * w + nx]) cerca = true
+            }
+            if (cerca) px[i] = sinFondo(px[i], fondo)
+        }
         return centrar(Bitmap.createBitmap(px, w, h, Bitmap.Config.ARGB_8888))
+    }
+
+    /**
+     * «Color a transparencia»: el píxel pierde la parte que se mezcló con el fondo y queda con su
+     * color puro y semitransparente. Es lo que da bordes suaves sin halo.
+     */
+    private fun sinFondo(c: Int, fondo: Int): Int {
+        val canales = intArrayOf((c shr 16) and 255, (c shr 8) and 255, c and 255)
+        val bases = intArrayOf((fondo shr 16) and 255, (fondo shr 8) and 255, fondo and 255)
+        var alfa = 0f
+        for (k in 0..2) {
+            val v = canales[k]
+            val f = bases[k]
+            if (v > f) alfa = maxOf(alfa, (v - f) / (255f - f))
+            else if (v < f) alfa = maxOf(alfa, (f - v) / f.toFloat())
+        }
+        alfa = ((alfa - .05f) / .95f).coerceIn(0f, 1f)
+        if (alfa <= 0f) return 0
+        val color = IntArray(3) { k -> ((canales[k] - bases[k] * (1 - alfa)) / alfa).toInt().coerceIn(0, 255) }
+        val a = (alfa * (c ushr 24)).toInt()
+        return (a shl 24) or (color[0] shl 16) or (color[1] shl 8) or color[2]
+    }
+
+    /** Todo el icono pasa por sinFondo: también los huecos del logo, que tienen el color del fondo. */
+    private fun sinFondoEntero(bmp: Bitmap, fondo: Int): Bitmap {
+        val px = IntArray(bmp.width * bmp.height)
+        bmp.getPixels(px, 0, bmp.width, 0, 0, bmp.width, bmp.height)
+        for (i in px.indices) px[i] = sinFondo(px[i], fondo)
+        return Bitmap.createBitmap(px, bmp.width, bmp.height, Bitmap.Config.ARGB_8888)
     }
 
     /** Recorta lo transparente y deja el contenido centrado ocupando `tamano` del lado. */

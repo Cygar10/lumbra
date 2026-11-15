@@ -177,6 +177,21 @@ class Fondo(private val context: Context, private val cuadro: ImageView, private
 }
 
 object Imagenes {
+    /** La imagen entera (sin recortar), con su lado mayor reducido a `maximo`. */
+    fun leerEntera(ruta: String, maximo: Int): Bitmap? {
+        val medidas = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        BitmapFactory.decodeFile(ruta, medidas)
+        if (medidas.outWidth <= 0 || medidas.outHeight <= 0) return null
+        var muestra = 1
+        while (maxOf(medidas.outWidth, medidas.outHeight) / (muestra * 2) >= maximo) muestra *= 2
+        val original = BitmapFactory.decodeFile(ruta, BitmapFactory.Options().apply { inSampleSize = muestra }) ?: return null
+        val lado = maxOf(original.width, original.height)
+        if (lado <= maximo) return original
+        val final = Bitmap.createScaledBitmap(original, original.width * maximo / lado, original.height * maximo / lado, true)
+        original.recycle()
+        return final
+    }
+
     /** Lee una imagen sin gastar más memoria de la que la pantalla puede mostrar, recortada a su forma. */
     fun leer(ruta: String, ancho: Int, alto: Int): Bitmap? {
         val medidas = BitmapFactory.Options().apply { inJustDecodeBounds = true }

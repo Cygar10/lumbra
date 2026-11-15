@@ -237,8 +237,8 @@ def asegurar_tv():
 def apk_incluido():
     """El APK que venga junto al programa (descargado o recién compilado)."""
     raiz = os.path.dirname(BASE)
-    for patron in (os.path.join(os.path.dirname(sys.executable), "lumbra*.apk") if EMPAQUETADO else os.path.join(raiz, "lumbra*.apk"),
-                   os.path.join(BASE, "lumbra*.apk"),
+    for patron in (os.path.join(os.path.dirname(sys.executable), "[Ll]umbra*.apk") if EMPAQUETADO else os.path.join(raiz, "[Ll]umbra*.apk"),
+                   os.path.join(BASE, "[Ll]umbra*.apk"),
                    os.path.join(raiz, "tv", "build", "app", "outputs", "flutter-apk", "app-release.apk")):
         hallados = sorted(glob.glob(patron), key=os.path.getmtime, reverse=True)
         if hallados:

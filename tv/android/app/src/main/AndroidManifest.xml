@@ -6,6 +6,8 @@
     <uses-feature android:name="android.software.leanback" android:required="false" />
 
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <!-- para descargar los temas de iconos -->
+    <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
     <uses-permission android:name="android.permission.QUERY_ALL_PACKAGES" />
@@ -78,8 +80,10 @@
             android:screenOrientation="landscape"
             android:theme="@style/NormalTheme" />
 
-        <!-- órdenes del programa de PC por ADB (fondo, volumen y fila de apps) -->
-        <receiver android:name=".ControlReceiver" android:exported="true">
+        <!-- órdenes del programa de PC por ADB (fondo, volumen y fila de apps).
+             Solo las acepta de ADB: las demás apps de la TV no tienen el permiso DUMP. -->
+        <receiver android:name=".ControlReceiver" android:exported="true"
+            android:permission="android.permission.DUMP">
             <intent-filter>
                 <action android:name="com.lumbra.tv.FONDO" />
                 <action android:name="com.lumbra.tv.VOLUMEN" />

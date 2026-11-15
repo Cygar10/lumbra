@@ -64,6 +64,9 @@ class Config extends ChangeNotifier {
       };
 
   String get nombres => texto('tarjeta_nombres', 'nunca');
+
+  /// Cómo se pintan los logos con el tema de iconos en uso: ninguno, blanco o acento.
+  String get temaFiltro => texto('tema_filtro', 'ninguno');
   bool get reloj24 => texto('reloj_formato', '12') == '24';
   String get carpetaApp => texto('carpeta_app');
   String get acentoNombre => colores.entries

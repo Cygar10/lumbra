@@ -74,7 +74,10 @@ const tamanoFilaInicial = 8;
 
 enum Zona { fila, arriba }
 
-enum Modal { ninguno, volumen, menu, todas, ajustes }
+/// Con la fila arriba: deja libre la barra aunque la tarjeta elegida se agrande y brille.
+const _filaArriba = 116.0;
+
+enum Modal { ninguno, volumen, menu, todas, ajustes, icono }
 
 class Inicio extends StatefulWidget {
   const Inicio({super.key});
@@ -118,8 +121,14 @@ class _InicioState extends State<Inicio> {
     _iniciar();
   }
 
+  String? _temaCargado;
+
   void _alCambiarConfig() {
     if (!mounted) return;
+    // otro tema de iconos: los iconos se vuelven a pedir
+    final tema = Config.i.texto('tema_iconos');
+    if (_temaCargado != null && tema != _temaCargado) _cargarApps();
+    _temaCargado = tema;
     setState(() {
       // aparecen o desaparecen elementos: el foco no debe quedar fuera de la lista
       _iArriba = _iArriba.clamp(0, _itemsArriba.length - 1);
@@ -285,7 +294,7 @@ class _InicioState extends State<Inicio> {
         if (dy < 0 && _iTodas < c) return;
         _iTodas = n;
         _desplazarTodas();
-      case Modal.ajustes:
+      case Modal.ajustes || Modal.icono:
         break;
       case Modal.ninguno:
         if (_zona == Zona.fila) {
@@ -320,7 +329,7 @@ class _InicioState extends State<Inicio> {
           _ejecutarMenu(_opcionesMenu[_iMenu]);
         case Modal.todas:
           if (_todasVisibles.isNotEmpty) Nativo.abrirApp(_todasVisibles[_iTodas].paquete);
-        case Modal.ajustes:
+        case Modal.ajustes || Modal.icono:
           break;
         case Modal.ninguno:
           if (_zona == Zona.fila) {
@@ -390,10 +399,19 @@ class _InicioState extends State<Inicio> {
       return [
         _fila.contains(p) ? 'Quitar de inicio' : 'Añadir a inicio',
         _ocultas.contains(p) ? 'Mostrar esta app' : 'Ocultar esta app',
+        ..._opcionesIcono,
         'Información de la app',
       ];
     }
-    return const ['Mover a la izquierda', 'Mover a la derecha', 'Quitar de inicio', 'Ocultar esta app', 'Información de la app'];
+    return ['Mover a la izquierda', 'Mover a la derecha', 'Quitar de inicio', 'Ocultar esta app', ..._opcionesIcono,
+        'Información de la app'];
+  }
+
+  List<String> get _opcionesIcono => ['Cambiar icono', if (_appMenu?.propio != null) 'Quitar icono propio'];
+
+  Future<void> _elegirIcono() async {
+    if (!await Nativo.pedirPermisoArchivos()) return;
+    if (mounted) setState(() => _modal = Modal.icono);
   }
 
   void _ejecutarMenu(String opcion) {
@@ -423,6 +441,11 @@ class _InicioState extends State<Inicio> {
         _iFila = _iFila.clamp(0, _itemsFila.length - 1);
       case 'Mostrar esta app':
         Config.i.poner('ocultas', _ocultas.where((p) => p != app.paquete).toList());
+      case 'Cambiar icono':
+        _elegirIcono();
+        return;
+      case 'Quitar icono propio':
+        Nativo.quitarIcono(app.paquete).then((_) => _cargarApps());
       case 'Información de la app':
         Nativo.abrirInfo(app.paquete);
     }
@@ -459,6 +482,13 @@ class _InicioState extends State<Inicio> {
     final altoFila = _lado + 40 + (conNombres ? 28 : 0);
     final oscurecer = cfg.entero('fondo_oscurecer');
     final posicion = cfg.texto('fila_posicion', 'abajo');
+    // dónde queda la fila, para que los paneles que se abren no la tapen ni queden debajo
+    final filaArriba = posicion == 'arriba'
+        ? _filaArriba
+        : 720 - altoFila - (posicion == 'centro' ? (720 - altoFila) / 2 : 52);
+    // el menú de una app se abre al lado contrario de su tarjeta
+    final centroTarjeta = 64 + _iFila * (_lado + separacion) + _lado / 2 - (_scrollFila.hasClients ? _scrollFila.offset : 0);
+    final menuALaDerecha = !_menuDesdeTodas && posicion != 'abajo' && centroTarjeta < 640;
     // el panel de ajustes tapa el inicio: así no se dibuja debajo cada vez que se pulsa una tecla
     final tapado = _modal == Modal.ajustes;
     return PopScope(
@@ -512,17 +542,10 @@ class _InicioState extends State<Inicio> {
                 ],
               ]))),
             ),
-            if (_modal == Modal.volumen)
-              Positioned(
-                  right: 48,
-                  top: 88,
-                  child: RepaintBoundary(child: PanelVolumen(volumen: _volumen, silencio: _silencio))),
             Positioned(
               left: 0,
               right: 0,
-              // arriba deja libre la barra; al centro y abajo se calcula desde el borde inferior
-              top: posicion == 'arriba' ? 104 : null,
-              bottom: posicion == 'arriba' ? null : (posicion == 'centro' ? (720 - altoFila) / 2 : 52),
+              top: filaArriba,
               height: altoFila,
               child: Offstage(offstage: tapado, child: ListView.separated(
                 controller: _scrollFila,
@@ -558,6 +581,12 @@ class _InicioState extends State<Inicio> {
                 },
               )),
             ),
+            // después de la fila para quedar encima; con la fila arriba se abre debajo de ella
+            if (_modal == Modal.volumen)
+              Positioned(
+                  right: 48,
+                  top: posicion == 'arriba' ? filaArriba + altoFila - 8 : 104,
+                  child: RepaintBoundary(child: PanelVolumen(volumen: _volumen, silencio: _silencio))),
             if (_modal == Modal.todas || (_modal == Modal.menu && _menuDesdeTodas))
               Positioned.fill(
                 child: TodasLasApps(
@@ -569,15 +598,36 @@ class _InicioState extends State<Inicio> {
                 ),
               ),
             if (_modal == Modal.menu && _appMenu != null)
-              // se abre en un sitio donde cabe aunque la fila esté arriba o las tarjetas sean grandes
+              // se abre donde no tapa su tarjeta: sobre la fila si está abajo y, si no, al lado contrario
               Positioned(
-                left: 64,
-                top: 120,
+                left: menuALaDerecha ? null : 64,
+                right: menuALaDerecha ? 64 : null,
+                top: _menuDesdeTodas || posicion == 'abajo' ? 120 : (posicion == 'centro' ? 200 : filaArriba + 8),
                 child: MenuOpciones(titulo: _appMenu!.nombre, opciones: _opcionesMenu, indice: _iMenu),
               ),
             if (_modal == Modal.ajustes)
               Positioned.fill(
                 child: RepaintBoundary(child: PanelAjustes(alCerrar: () => setState(_cerrarModal))),
+              ),
+            if (_modal == Modal.icono && _appMenu != null)
+              Positioned.fill(
+                child: Explorador(
+                  titulo: 'Icono para ${_appMenu!.nombre}',
+                  soloImagenes: true,
+                  soloCarpeta: false,
+                  alCerrar: () => setState(() {
+                    _modal = _menuDesdeTodas ? Modal.todas : Modal.ninguno;
+                    _foco.requestFocus();
+                  }),
+                  alElegir: (ruta) async {
+                    final paquete = _appMenu!.paquete;
+                    setState(() {
+                      _modal = _menuDesdeTodas ? Modal.todas : Modal.ninguno;
+                      _foco.requestFocus();
+                    });
+                    if (await Nativo.ponerIcono(paquete, ruta)) _cargarApps();
+                  },
+                ),
               ),
           ]),
         ),

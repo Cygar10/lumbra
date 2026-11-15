@@ -156,6 +156,10 @@ class _PanelAjustesState extends State<PanelAjustes> {
                 final i = v.indexOf(c.entero('acento', v.first));
                 c.poner('acento', v[(i + d) % v.length]);
               }),
+          Opcion('Tema de iconos',
+              ayuda: 'Estilos para las apps más conocidas. Las demás usan su logo o el icono que les pongas',
+              valor: () => c.texto('tema_nombre').isEmpty ? 'Automático' : c.texto('tema_nombre'),
+              accion: () => setState(() => _verTemas = true)),
           _elegir('Tamaño de las tarjetas', 'tarjeta_tam', const {'M': 'Medianas', 'S': 'Pequeñas', 'L': 'Grandes'}),
           _elegir('Forma de las tarjetas', 'tarjeta_forma', const {'redondeada': 'Redondeadas', 'cuadrada': 'Cuadradas', 'circulo': 'Círculos'}),
           _elegir('Nombre de las apps', 'tarjeta_nombres', const {'nunca': 'No mostrar', 'enfocada': 'Solo la elegida', 'siempre': 'Siempre'}),
@@ -298,6 +302,7 @@ class _PanelAjustesState extends State<PanelAjustes> {
   }
 
   bool _sinPermiso = false;
+  bool _verTemas = false;
 
   void _cerrarExplorador() {
     setState(() => _eleccion = null);
@@ -309,6 +314,12 @@ class _PanelAjustesState extends State<PanelAjustes> {
 
   @override
   Widget build(BuildContext context) {
+    if (_verTemas) {
+      return PanelTemas(alCerrar: () {
+        setState(() => _verTemas = false);
+        _pedirFoco();
+      });
+    }
     if (_eleccion != null) {
       final soloCarpeta = _eleccion == _Eleccion.carpetaSalva;
       return Explorador(
@@ -461,10 +472,19 @@ class _FilaOpcion extends StatelessWidget {
 class Explorador extends StatefulWidget {
   final String titulo;
   final bool soloCarpeta;
+
+  /// solo se muestran carpetas e imágenes (para elegir el icono de una app)
+  final bool soloImagenes;
   final void Function(String ruta) alElegir;
   final VoidCallback alCerrar;
 
-  const Explorador({super.key, required this.titulo, required this.soloCarpeta, required this.alElegir, required this.alCerrar});
+  const Explorador(
+      {super.key,
+      required this.titulo,
+      required this.soloCarpeta,
+      this.soloImagenes = false,
+      required this.alElegir,
+      required this.alCerrar});
 
   @override
   State<Explorador> createState() => _ExploradorState();
@@ -510,7 +530,11 @@ class _ExploradorState extends State<Explorador> {
     final lista = await Nativo.listar(ruta);
     if (!mounted) return;
     setState(() {
-      _entradas = widget.soloCarpeta ? lista.where((e) => e.tipo == 'dir').toList() : lista;
+      _entradas = widget.soloCarpeta
+          ? lista.where((e) => e.tipo == 'dir').toList()
+          : widget.soloImagenes
+              ? lista.where((e) => e.tipo != 'video').toList()
+              : lista;
       _i = 0;
       _cargando = false;
       if (_pila.isEmpty || _pila.last != ruta) _pila.add(ruta);
@@ -651,6 +675,203 @@ class _ExploradorState extends State<Explorador> {
           ),
           const SizedBox(height: 10),
           Text('OK  abrir o elegir      ATRÁS  subir', style: TextStyle(color: Tema.textoSuave, fontSize: 14)),
+        ]),
+      ),
+    );
+  }
+}
+
+/// Temas de iconos: se descargan del repositorio de Lumbra, se usan y se quitan.
+class PanelTemas extends StatefulWidget {
+  final VoidCallback alCerrar;
+  const PanelTemas({super.key, required this.alCerrar});
+
+  @override
+  State<PanelTemas> createState() => _PanelTemasState();
+}
+
+class _PanelTemasState extends State<PanelTemas> {
+  final _foco = FocusNode();
+  List<Map> _temas = [];
+  bool _cargando = true;
+  bool _enLinea = true;
+  String? _ocupado;
+  String? _aviso;
+  int _i = 0;
+  DateTime? _okPresionado;
+  bool _okLargo = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _cargar();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _foco.requestFocus();
+    });
+  }
+
+  @override
+  void dispose() {
+    _foco.dispose();
+    super.dispose();
+  }
+
+  Future<void> _cargar() async {
+    final r = await Nativo.temas();
+    if (!mounted) return;
+    setState(() {
+      _temas = ((r['themes'] as List?) ?? []).cast<Map>();
+      _enLinea = r['online'] == true;
+      _cargando = false;
+      _i = _i.clamp(0, _temas.length);
+    });
+  }
+
+  String get _enUso => Config.i.texto('tema_iconos');
+
+  Future<void> _usar(String id) async {
+    await Nativo.guardar('tema_iconos', id);
+    Config.i.cargar(await Nativo.ajustes());
+    if (mounted) setState(() => _aviso = null);
+  }
+
+  Future<void> _aceptar() async {
+    if (_ocupado != null) return;
+    if (_i == 0) return _usar('');
+    final t = _temas[_i - 1];
+    final id = t['id'] as String;
+    if (t['installed'] != true) {
+      setState(() {
+        _ocupado = id;
+        _aviso = 'Descargando «${t['name']}»…';
+      });
+      final ok = await Nativo.descargarTema(id);
+      if (!mounted) return;
+      setState(() {
+        _ocupado = null;
+        _aviso = ok ? null : 'No se pudo descargar. Revisa la conexión a internet de la TV.';
+      });
+      if (!ok) return;
+      await _cargar();
+    }
+    await _usar(id);
+  }
+
+  Future<void> _quitar() async {
+    if (_i == 0 || _ocupado != null) return;
+    final t = _temas[_i - 1];
+    if (t['installed'] != true) return;
+    await Nativo.quitarTema(t['id'] as String);
+    Config.i.cargar(await Nativo.ajustes());
+    await _cargar();
+    if (mounted) setState(() => _aviso = 'Se quitó «${t['name']}» de la TV');
+  }
+
+  KeyEventResult _tecla(FocusNode _, KeyEvent e) {
+    final k = e.logicalKey;
+    final ok = k == LogicalKeyboardKey.select || k == LogicalKeyboardKey.enter || k == LogicalKeyboardKey.numpadEnter;
+    if (ok) {
+      // OK usa el tema; mantener OK lo quita de la TV
+      if (e is KeyDownEvent) {
+        _okPresionado = DateTime.now();
+        _okLargo = false;
+      } else if (e is KeyRepeatEvent && !_okLargo && _okPresionado != null &&
+          DateTime.now().difference(_okPresionado!) > const Duration(milliseconds: 550)) {
+        _okLargo = true;
+        _quitar();
+      } else if (e is KeyUpEvent) {
+        if (!_okLargo) _aceptar();
+        _okPresionado = null;
+      }
+      return KeyEventResult.handled;
+    }
+    if (e is KeyUpEvent) return KeyEventResult.handled;
+    if (k == LogicalKeyboardKey.contextMenu || k == LogicalKeyboardKey.info) {
+      if (e is KeyDownEvent) _quitar();
+    } else if (k == LogicalKeyboardKey.goBack || k == LogicalKeyboardKey.escape || k == LogicalKeyboardKey.browserBack ||
+        k == LogicalKeyboardKey.arrowLeft) {
+      if (e is KeyDownEvent) widget.alCerrar();
+    } else if (k == LogicalKeyboardKey.arrowUp || k == LogicalKeyboardKey.arrowDown) {
+      setState(() => _i = (_i + (k == LogicalKeyboardKey.arrowDown ? 1 : -1)).clamp(0, _temas.length));
+    }
+    return KeyEventResult.handled;
+  }
+
+  Widget _fila(String nombre, String? descripcion, String estado, bool enfocada, bool enUso) {
+    final texto = enfocada ? Colors.white : Tema.texto;
+    final suave = enfocada ? const Color(0xDDFFFFFF) : Tema.textoSuave;
+    return Container(
+      constraints: const BoxConstraints(minHeight: 64),
+      margin: const EdgeInsets.only(bottom: 10),
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+      decoration: BoxDecoration(
+        color: enfocada ? Tema.rojo : const Color(0x14FFFFFF),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Row(children: [
+        Icon(enUso ? Icons.check_circle_rounded : Icons.palette_outlined, size: 24, color: enUso ? (enfocada ? Colors.white : Tema.rojo) : suave),
+        const SizedBox(width: 16),
+        Expanded(
+          child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text(nombre, style: TextStyle(color: texto, fontSize: 18, fontWeight: FontWeight.w500)),
+            if (descripcion != null && descripcion.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.only(top: 2),
+                child: Text(descripcion, style: TextStyle(color: suave, fontSize: 13)),
+              ),
+          ]),
+        ),
+        const SizedBox(width: 12),
+        Text(estado, style: TextStyle(color: texto, fontSize: 15)),
+      ]),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final enUso = _enUso;
+    return Focus(
+      focusNode: _foco,
+      autofocus: true,
+      onKeyEvent: _tecla,
+      child: Container(
+        color: Tema.fondoTodas,
+        padding: const EdgeInsets.fromLTRB(56, 40, 56, 28),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text('Tema de iconos', style: TextStyle(color: Tema.texto, fontSize: 30, fontWeight: FontWeight.w300, letterSpacing: 1)),
+          const SizedBox(height: 4),
+          Text('Cambia los iconos de las apps más conocidas. Las demás usan su logo, o el que les pongas manteniendo OK sobre ellas.',
+              style: TextStyle(color: Tema.textoSuave, fontSize: 14)),
+          const SizedBox(height: 20),
+          Expanded(
+            child: _cargando
+                ? Text('Buscando temas…', style: TextStyle(color: Tema.textoSuave, fontSize: 16))
+                : ListView(children: [
+                    _fila('Automático', 'El logo de cada app, sin tema', enUso.isEmpty ? 'En uso' : '', _i == 0, enUso.isEmpty),
+                    for (var n = 0; n < _temas.length; n++)
+                      _fila(
+                        _temas[n]['name'] as String,
+                        '${_temas[n]['description']}  ·  ${_temas[n]['apps']} apps',
+                        _ocupado == _temas[n]['id']
+                            ? 'Descargando…'
+                            : enUso == _temas[n]['id']
+                                ? 'En uso'
+                                : _temas[n]['installed'] == true
+                                    ? 'Descargado'
+                                    : 'Descargar',
+                        _i == n + 1,
+                        enUso == _temas[n]['id'],
+                      ),
+                  ]),
+          ),
+          const SizedBox(height: 10),
+          Text(
+            _aviso ??
+                (_enLinea
+                    ? 'OK  usar (lo descarga si hace falta)      mantén OK  quitar de la TV      ATRÁS  volver'
+                    : 'Sin conexión: solo se ven los temas ya descargados      ATRÁS  volver'),
+            style: TextStyle(color: _aviso != null ? Tema.brasa : Tema.textoSuave, fontSize: 14),
+          ),
         ]),
       ),
     );

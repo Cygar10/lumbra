@@ -28,13 +28,24 @@ class TarjetaApp extends StatelessWidget {
     final cfg = Config.i;
     final curva = lado * cfg.formaTarjeta;
     final radio = BorderRadius.circular(curva);
-    Widget logo;
-    if (app.propio != null) {
-      // logo propio enviado desde la PC: ya viene centrado y sin fondo
-      // vienen a 512 px: se decodifican a 256 (la tarjeta enfocada mide ~128) y ocupan la cuarta parte
-      logo = Image.memory(app.propio!, cacheWidth: 256, filterQuality: FilterQuality.medium, gaplessPlayback: true);
+    // icono que llena la tarjeta: una imagen propia sin transparencia o un tema de iconos completos
+    final lleno = app.propio != null ? (app.propioLleno ? app.propio : null) : app.completo;
+    // el tema de iconos puede pintar todos los logos de blanco o del color del tema; el color se
+    // aplica al dibujar la imagen, sin capas extra
+    final tinte = switch (cfg.temaFiltro) {
+      'blanco' => Colors.white,
+      'acento' => Tema.rojo,
+      _ => null,
+    };
+    Widget? logo;
+    if (lleno != null) {
+      logo = null;
+    } else if (app.propio != null) {
+      // icono propio: ya viene reducido a 256 px con suavizado
+      logo = Image.memory(app.propio!, filterQuality: FilterQuality.medium, gaplessPlayback: true);
     } else if (app.logo != null) {
-      logo = Image.memory(app.logo!, filterQuality: FilterQuality.medium, gaplessPlayback: true);
+      logo = Image.memory(app.logo!,
+          filterQuality: FilterQuality.medium, gaplessPlayback: true, color: tinte, colorBlendMode: BlendMode.srcIn);
     } else {
       logo = Center(
         child: Text(app.nombre.characters.first.toUpperCase(),
@@ -57,6 +68,13 @@ class TarjetaApp extends StatelessWidget {
         height: lado,
         decoration: BoxDecoration(
           borderRadius: radio,
+          image: lleno == null
+              ? null
+              : DecorationImage(
+                  image: MemoryImage(lleno),
+                  fit: BoxFit.cover,
+                  filterQuality: FilterQuality.medium,
+                  opacity: atenuada ? .35 : 1),
           gradient: LinearGradient(
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
@@ -72,7 +90,8 @@ class TarjetaApp extends StatelessWidget {
           fit: StackFit.expand,
           children: [
             // los logos ya traen el margen transparente: no hace falta recortarlos (un recorte cuesta en cada cuadro)
-            if (atenuada) Opacity(opacity: .35, child: logo) else logo,
+            if (logo != null)
+              if (atenuada) Opacity(opacity: .35, child: logo) else logo,
             if (marcada)
               Positioned(
                 right: 6,
@@ -136,7 +155,13 @@ class _RelojState extends State<Reloj> {
   @override
   void initState() {
     super.initState();
+    // el formato y la fecha se cambian en los ajustes: se aplican al momento, no al minuto siguiente
+    Config.i.addListener(_alCambiar);
     _programar();
+  }
+
+  void _alCambiar() {
+    if (mounted) setState(() => _ahora = DateTime.now());
   }
 
   void _programar() {
@@ -150,6 +175,7 @@ class _RelojState extends State<Reloj> {
 
   @override
   void dispose() {
+    Config.i.removeListener(_alCambiar);
     _timer?.cancel();
     super.dispose();
   }

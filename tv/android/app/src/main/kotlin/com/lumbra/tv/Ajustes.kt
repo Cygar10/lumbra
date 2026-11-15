@@ -18,7 +18,8 @@ object Ajustes {
     private val IMAGEN = setOf("jpg", "jpeg", "png", "webp", "gif", "bmp")
 
     val PREDETERMINADOS: Map<String, Any> = mapOf(
-        "fondo_tipo" to "archivo", // archivo (video o imagen), color o ninguno
+        // recién instalado no hay fondo elegido: un color sobrio hasta que el usuario ponga el suyo
+        "fondo_tipo" to "color", // archivo (video o imagen), color o ninguno
         "fondo_ruta" to "",
         "fondo_color" to 0xFF12080A.toInt(),
         "fondo_pausado" to false,
@@ -36,6 +37,9 @@ object Ajustes {
         "reloj_formato" to "12",
         "reloj_fecha" to false,
         "musica_visible" to true,
+        "tema_iconos" to "", // vacío: logos automáticos; si no, el id del tema descargado
+        // de dónde se bajan los temas de iconos (la carpeta temas/ del repositorio)
+        "temas_url" to "https://raw.githubusercontent.com/Cygar10/lumbra/main/temas/",
         "mostrar_ocultas" to false,
         "modo_ligero" to false,
         "abrir_al_encender" to true,
@@ -61,6 +65,11 @@ object Ajustes {
         // las listas conservan su orden: van separadas por saltos de línea
         for (clave in LISTAS) datos[clave] = p.getString(clave, null)?.split('\n')?.filter { it.isNotEmpty() }
         datos["carpeta_app"] = c.getExternalFilesDir(null)?.absolutePath
+        // cómo dibuja Flutter los iconos del tema en uso
+        val tema = Temas.activo(c)
+        datos["tema_nombre"] = tema?.optString("nombre")
+        datos["tema_filtro"] = tema?.optString("filtro", "ninguno") ?: "ninguno"
+        datos["tema_relleno"] = tema?.optBoolean("relleno") == true
         return datos
     }
 
@@ -85,7 +94,8 @@ object Ajustes {
         // el archivo de fondo, las apps, el salvapantallas y el arranque no son apariencia: se conservan
         val e = prefs(c).edit()
         for (clave in PREDETERMINADOS.keys) {
-            if (clave != "fondo_ruta" && clave != "abrir_al_encender" && !clave.startsWith("salva_")) e.remove(clave)
+            if (clave != "fondo_ruta" && clave != "fondo_tipo" && clave != "abrir_al_encender" && clave != "temas_url" &&
+                !clave.startsWith("salva_")) e.remove(clave)
         }
         e.apply()
     }

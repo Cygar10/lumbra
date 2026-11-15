@@ -10,13 +10,17 @@ class App {
   final String nombre;
   final String paquete;
   final Uint8List? logo; // logo sin el cuadro de color de la app, centrado con margen
-  final Uint8List? propio; // icono propio puesto desde la PC
+  final Uint8List? propio; // icono que el usuario eligió para la app
+  final bool propioLleno; // el icono propio no tiene transparencia: llena la tarjeta
+  final Uint8List? completo; // icono entero, con su fondo, para los temas que llenan la tarjeta
 
   App.desde(Map m)
       : nombre = m['name'] as String,
         paquete = m['packageName'] as String,
         logo = m['logo'] as Uint8List?,
-        propio = m['custom'] as Uint8List?;
+        propio = m['custom'] as Uint8List?,
+        propioLleno = m['customFull'] as bool? ?? false,
+        completo = m['full'] as Uint8List?;
 }
 
 class Musica {
@@ -89,6 +93,16 @@ class Nativo {
     final lista = await _metodos.invokeListMethod<Map>('listDir', ruta) ?? [];
     return lista.map(Entrada.desde).toList();
   }
+
+  /// Temas de iconos: {themes: [{id, name, description, apps, installed}], online}.
+  static Future<Map> temas() async => await _metodos.invokeMapMethod('themes') ?? {};
+  static Future<bool> descargarTema(String id) async => await _metodos.invokeMethod<bool>('downloadTheme', id) ?? false;
+  static Future<void> quitarTema(String id) => _metodos.invokeMethod('removeTheme', id);
+
+  /// Icono propio de una app, elegido entre las imágenes de la TV.
+  static Future<bool> ponerIcono(String paquete, String ruta) async =>
+      await _metodos.invokeMethod<bool>('setCustomIcon', {'package': paquete, 'path': ruta}) ?? false;
+  static Future<void> quitarIcono(String paquete) => _metodos.invokeMethod('removeCustomIcon', paquete);
 
   static Future<Map> infoSalva() async => await _metodos.invokeMapMethod('screensaverInfo') ?? {};
   static Future<void> probarSalva() => _metodos.invokeMethod('testScreensaver');
